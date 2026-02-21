@@ -1,0 +1,25 @@
+{
+	"name": "@repo/agent-kit-react",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./use-chat": "./src/use-chat.ts",
+		"./message-handler": "./src/message-handler.ts",
+		"./chat-ops": "./src/chat-ops.ts"
+	},
+	"peerDependencies": {
+		"react": "^19.0.0",
+		"@repo/agent-kit": "*",
+		"agents": "^0.5.0"
+	},
+	"dependencies": {
+		"ai": "^6.0.0"
+	},
+	"devDependencies": {
+		"@repo/typescript-config": "*",
+		"@types/react": "^19.0.0",
+		"typescript": "^5.5.2"
+	}
+}

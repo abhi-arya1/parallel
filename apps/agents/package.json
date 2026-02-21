@@ -6,16 +6,21 @@
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
-		"cf-typegen": "wrangler types"
+		"cf-typegen": "wrangler types",
+		"db:generate": "drizzle-kit generate"
 	},
 	"devDependencies": {
 		"@types/node": "^25.3.0",
+		"drizzle-kit": "^0.31.8",
 		"typescript": "^5.5.2",
 		"wrangler": "^4.59.1"
 	},
 	"dependencies": {
 		"@ai-sdk/gateway": "^3.0.53",
+		"@repo/agent-kit": "*",
 		"agents": "^0.5.1",
-		"ai": "^6.0.97"
+		"ai": "^6.0.97",
+		"drizzle-orm": "^0.45.0",
+		"nanoid": "^5.1.6"
 	}
 }

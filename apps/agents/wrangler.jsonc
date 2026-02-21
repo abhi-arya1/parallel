@@ -2,7 +2,7 @@
 	"name": "parallel-agents",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-02-21",
-	"compatibility_flags": ["nodejs_compat"],
+	"compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
 	"observability": {
 		"enabled": true,
 	},

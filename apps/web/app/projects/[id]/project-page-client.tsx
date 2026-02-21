@@ -33,12 +33,11 @@ export function ProjectPageClient({
           />
         }
       >
-        {null}
-        {/*<NotebookEditor
+        <NotebookEditor
           workspaceId={id}
           preloadedUser={preloadedUser}
           preloadedWorkspace={preloadedWorkspace}
-        />*/}
+        />
       </ResizableLayout>
     </div>
   );

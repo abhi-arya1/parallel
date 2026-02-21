@@ -177,20 +177,24 @@ export function ShareDialog({
                 </p>
               </div>
               {data.isOwner ? (
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
                   onClick={() => handleRemove(c._id)}
-                  className="text-muted-foreground hover:text-destructive p-1 cursor-pointer"
+                  className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 >
                   <HugeiconsIcon icon={Delete02Icon} size={14} />
-                </button>
+                </Button>
               ) : c._id === data.currentUserId ? (
-                <button
+                <Button
+                  variant="ghost"
+                  size="xs"
                   onClick={handleLeave}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive cursor-pointer px-1.5 py-0.5 rounded hover:bg-destructive/10 transition-colors"
+                  className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 >
                   <HugeiconsIcon icon={Logout03Icon} size={12} />
                   Leave
-                </button>
+                </Button>
               ) : null}
             </div>
           ))}

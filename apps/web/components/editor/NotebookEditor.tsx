@@ -7,6 +7,7 @@ import type { Preloaded } from "convex/react";
 
 import { createYDoc, getCellOrder, getCellData, createCell } from "@/lib/ydoc";
 import { createProvider, createAwarenessUser } from "@/lib/yjs-provider";
+import { useBroadcastCellFocus } from "@/lib/use-cell-presence";
 import type { CellType, CellMetadata, AwarenessUser } from "@/types/cells";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -35,6 +36,9 @@ export function NotebookEditor({
   const [cellIds, setCellIds] = useState<string[]>([]);
   const [connectedUsers, setConnectedUsers] = useState<AwarenessUser[]>([]);
   const [activeCellId, setActiveCellId] = useState<string | null>(null);
+
+  // Broadcast which cell is focused to other users
+  useBroadcastCellFocus(provider, activeCellId);
 
   // Create awareness user from Convex user
   const awarenessUser = useMemo(() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import * as Y from "yjs";
 import type YPartyKitProvider from "y-partykit/provider";
 import {
@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { updateCellStatus, updateCellType, deleteCell } from "@/lib/ydoc";
+import { useCellText } from "@/lib/ydoc-hooks";
 import {
   type CellMetadata,
   type CellType,
@@ -24,9 +25,30 @@ import {
 } from "@/types/cells";
 import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-import { RichTextCell } from "./RichTextCell";
 import { CodeCell } from "./CodeCell";
+import { MarkdownEditor } from "./MarkdownEditor";
+import { MarkdownPreview } from "./MarkdownPreview";
+import { useCellPresence } from "@/lib/use-cell-presence";
+
+// Utility to get contrasting text color for a background
+function getTextColorForBackground(backgroundColor: string): string {
+  const hex = backgroundColor.replace("#", "");
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5 ? "#000000" : "#FFFFFF";
+}
 
 interface CellShellProps {
   cellId: string;
@@ -50,13 +72,45 @@ export function CellShell({
   workspaceId,
 }: CellShellProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const shellRef = useRef<HTMLDivElement>(null);
 
   const isAgent = metadata.authorType === "agent";
   const isPending = metadata.status === "pending";
   const isPruned = metadata.status === "pruned";
   const isPromoted = metadata.status === "promoted";
   const isCode = metadata.type === "code";
+
+  // Track other users focused on this cell
+  const usersInCell = useCellPresence(provider, cellId);
+
+  // Get Y.Text content for preview mode
+  const ytext = useCellText(ydoc, cellId);
+  const [previewContent, setPreviewContent] = useState("");
+
+  // Sync preview content from Y.Text
+  useEffect(() => {
+    if (!ytext) return;
+    setPreviewContent(ytext.toString());
+
+    const observer = () => setPreviewContent(ytext.toString());
+    ytext.observe(observer);
+    return () => ytext.unobserve(observer);
+  }, [ytext]);
+
+  // Click outside to exit edit mode (for non-code cells)
+  useEffect(() => {
+    if (!isEditing || isCode) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (shellRef.current && !shellRef.current.contains(e.target as Node)) {
+        setIsEditing(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isEditing, isCode]);
 
   // Get agent color
   const agentColor = metadata.agentRole
@@ -66,28 +120,23 @@ export function CellShell({
   // Handle status changes
   const handlePromote = useCallback(() => {
     updateCellStatus(ydoc, cellId, "promoted");
-    setShowMenu(false);
   }, [ydoc, cellId]);
 
   const handleArchive = useCallback(() => {
     updateCellStatus(ydoc, cellId, "pruned");
-    setShowMenu(false);
   }, [ydoc, cellId]);
 
   const handleRestore = useCallback(() => {
     updateCellStatus(ydoc, cellId, "active");
-    setShowMenu(false);
   }, [ydoc, cellId]);
 
   const handleDelete = useCallback(() => {
     deleteCell(ydoc, cellId);
-    setShowMenu(false);
   }, [ydoc, cellId]);
 
   const handleChangeType = useCallback(
     (newType: CellType) => {
       updateCellType(ydoc, cellId, newType);
-      setShowMenu(false);
     },
     [ydoc, cellId],
   );
@@ -133,8 +182,11 @@ export function CellShell({
     );
   }
 
+  const hasOtherUsers = usersInCell.length > 0 && !isActive;
+
   return (
     <div
+      ref={shellRef}
       className={cn(
         "group relative rounded-lg border transition-all duration-200",
         isActive
@@ -149,12 +201,31 @@ export function CellShell({
         borderLeftWidth: isAgent ? "4px" : undefined,
       }}
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => {
-        setIsHovered(false);
-        setShowMenu(false);
-      }}
+      onMouseLeave={() => setIsHovered(false)}
       onClick={onActivate}
     >
+      {/* Presence indicator - show other users focused on this cell */}
+      {hasOtherUsers && (
+        <div className="absolute -top-3 right-3 z-10 flex -space-x-1">
+          {usersInCell.slice(0, 3).map((user) => (
+            <div
+              key={user.clientId}
+              className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium shadow-sm"
+              style={{
+                backgroundColor: user.color,
+                color: getTextColorForBackground(user.color),
+              }}
+            >
+              {user.name}
+            </div>
+          ))}
+          {usersInCell.length > 3 && (
+            <div className="flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm">
+              +{usersInCell.length - 3}
+            </div>
+          )}
+        </div>
+      )}
       {/* Header - always visible for agent cells, hover for human */}
       <div
         className={cn(
@@ -196,117 +267,110 @@ export function CellShell({
         {/* Controls */}
         <div
           className={cn(
-            "flex items-center gap-1",
+            "flex items-center gap-0.5",
             !isHovered && "opacity-0",
             "transition-opacity duration-150",
           )}
         >
           {!isPromoted && (
-            <button
-              onClick={(e) => {
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={(e: React.MouseEvent) => {
                 e.stopPropagation();
                 handlePromote();
               }}
-              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground"
               title="Promote"
             >
-              <ArrowUp className="h-3.5 w-3.5" />
-            </button>
+              <ArrowUp className="size-3.5" />
+            </Button>
           )}
-          <button
-            onClick={(e) => {
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={(e: React.MouseEvent) => {
               e.stopPropagation();
               handleArchive();
             }}
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground"
             title="Archive"
           >
-            <ArrowDown className="h-3.5 w-3.5" />
-          </button>
-          <div className="relative">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowMenu(!showMenu);
-              }}
-              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <MoreHorizontal className="h-3.5 w-3.5" />
-            </button>
-
-            {/* Dropdown menu */}
-            {showMenu && (
-              <div
-                className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-md border border-border bg-popover p-1 shadow-lg"
-                onClick={(e) => e.stopPropagation()}
+            <ArrowDown className="size-3.5" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                className="text-muted-foreground hover:text-foreground"
               >
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(
-                      `${window.location.href}#cell-${cellId}`,
-                    );
-                    setShowMenu(false);
-                  }}
-                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                >
-                  <Link2 className="h-3.5 w-3.5" />
-                  Copy link
-                </button>
+                <MoreHorizontal className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            >
+              <DropdownMenuItem
+                onClick={() => {
+                  navigator.clipboard.writeText(
+                    `${window.location.href}#cell-${cellId}`,
+                  );
+                }}
+              >
+                <Link2 className="size-3.5" />
+                Copy link
+              </DropdownMenuItem>
 
-                {isAgent && (
-                  <button
-                    onClick={() => setShowMenu(false)}
-                    className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              {isAgent && (
+                <DropdownMenuItem>
+                  <RefreshCw className="size-3.5" />
+                  Re-run agent
+                </DropdownMenuItem>
+              )}
+
+              {!isAgent && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Change type</DropdownMenuLabel>
+                  {(
+                    [
+                      "hypothesis",
+                      "finding",
+                      "note",
+                      "synthesis",
+                      "dead-end",
+                    ] as CellType[]
+                  )
+                    .filter((t) => t !== metadata.type && t !== "code")
+                    .map((type) => (
+                      <DropdownMenuItem
+                        key={type}
+                        onClick={() => handleChangeType(type)}
+                      >
+                        <Pencil className="size-3.5" />
+                        {CELL_TYPE_INFO[type].label}
+                      </DropdownMenuItem>
+                    ))}
+                </>
+              )}
+
+              {!isAgent && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={handleDelete}
                   >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Re-run agent
-                  </button>
-                )}
-
-                {!isAgent && (
-                  <>
-                    <div className="my-1 border-t border-border" />
-                    <div className="px-2 py-1 text-xs text-muted-foreground">
-                      Change type
-                    </div>
-                    {(
-                      [
-                        "hypothesis",
-                        "finding",
-                        "note",
-                        "synthesis",
-                        "dead-end",
-                      ] as CellType[]
-                    )
-                      .filter((t) => t !== metadata.type && t !== "code")
-                      .map((type) => (
-                        <button
-                          key={type}
-                          onClick={() => handleChangeType(type)}
-                          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                          {CELL_TYPE_INFO[type].label}
-                        </button>
-                      ))}
-                  </>
-                )}
-
-                {!isAgent && (
-                  <>
-                    <div className="my-1 border-t border-border" />
-                    <button
-                      onClick={handleDelete}
-                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Delete
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+                    <Trash2 className="size-3.5" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -327,14 +391,12 @@ export function CellShell({
             language={metadata.language ?? "python"}
             workspaceId={workspaceId}
           />
+        ) : isEditing ? (
+          <MarkdownEditor cellId={cellId} ydoc={ydoc} provider={provider} />
         ) : (
-          <RichTextCell
-            cellId={cellId}
-            ydoc={ydoc}
-            provider={provider}
-            cellType={metadata.type}
-            onInsertCodeCell={() => onInsertBelow("code")}
-          />
+          <div onClick={() => setIsEditing(true)} className="cursor-text">
+            <MarkdownPreview content={previewContent} />
+          </div>
         )}
       </div>
     </div>

@@ -26,8 +26,11 @@ export function createProvider(
   );
 
   // Set user awareness if provided
+  // y-monaco expects name and color at root level for cursor rendering
   if (user) {
     provider.awareness.setLocalStateField("user", user);
+    provider.awareness.setLocalStateField("name", user.name);
+    provider.awareness.setLocalStateField("color", user.color);
   }
 
   return provider;

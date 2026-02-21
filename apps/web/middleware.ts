@@ -11,10 +11,7 @@ export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   const pathname = request.nextUrl.pathname;
 
   if (pathname === "/") {
-    return nextjsMiddlewareRedirect(
-      request,
-      isAuthenticated ? "/projects" : "/signin"
-    );
+    return;
   }
   if (!isPublicRoute(request) && !isAuthenticated) {
     return nextjsMiddlewareRedirect(request, "/signin");

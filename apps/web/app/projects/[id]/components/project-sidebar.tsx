@@ -10,6 +10,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Door01Icon, AddTeamIcon } from "@hugeicons-pro/core-duotone-rounded";
 import { cn } from "@/lib/utils";
 import { ShareDialog } from "./share-dialog";
+import { Button } from "@/components/ui/button";
 
 interface ProjectSidebarProps {
   preloadedWorkspace: Preloaded<typeof api.workspaces.get>;
@@ -68,13 +69,15 @@ function ProjectSidebarHeader({
   return (
     <header className="flex flex-col gap-3 px-4 py-3">
       <div className="flex items-center gap-2">
-        <button
+        <Button
+          variant="ghost"
+          size="icon-xs"
           onClick={() => router.push("/projects")}
-          className="text-muted-foreground hover:text-foreground transition-colors"
           aria-label="Back to projects"
+          className="text-muted-foreground hover:text-foreground"
         >
           <HugeiconsIcon icon={Door01Icon} size={18} />
-        </button>
+        </Button>
         <span className="text-muted-foreground">/</span>
         {workspace ? (
           <InlineRenameTitle
@@ -92,9 +95,10 @@ function ProjectSidebarHeader({
       {/* Share button - full width */}
       {workspace && (
         <>
-          <button
+          <Button
+            variant="ghost"
             onClick={() => setShareOpen(true)}
-            className="flex items-center justify-between w-full text-sm text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted"
+            className="flex items-center justify-between w-full text-sm text-muted-foreground hover:text-foreground h-auto px-2 py-1.5"
           >
             <div className="flex items-center gap-2">
               <HugeiconsIcon icon={AddTeamIcon} size={18} />
@@ -152,7 +156,7 @@ function ProjectSidebarHeader({
                 )}
               </div>
             )}
-          </button>
+          </Button>
 
           <ShareDialog
             workspaceId={workspace._id}

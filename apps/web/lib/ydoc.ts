@@ -44,12 +44,12 @@ export function getCell(
 }
 
 /**
- * Get cell content (Y.XmlFragment for rich text, Y.Text for code)
+ * Get cell content (always Y.Text)
  */
 export function getCellContent(
   cell: Y.Map<unknown>,
-): Y.XmlFragment | Y.Text | undefined {
-  return cell.get("content") as Y.XmlFragment | Y.Text | undefined;
+): Y.Text | undefined {
+  return cell.get("content") as Y.Text | undefined;
 }
 
 /**
@@ -78,11 +78,9 @@ interface CreateCellOptions {
 }
 
 /**
- * Create a new cell and add it to the document
- * @param ydoc The Y.Doc instance
- * @param options Cell creation options
- * @param afterCellId Optional cell ID to insert after (appends to end if not provided)
- * @returns The new cell's ID
+ * Create a new cell and add it to the document.
+ * Content (Y.Text) is set AFTER the cell map is integrated into the doc
+ * to avoid operating on non-integrated Y types.
  */
 export function createCell(
   ydoc: Y.Doc,
@@ -107,16 +105,16 @@ export function createCell(
       cellMap.set("agentRole", options.agentRole);
     }
 
-    // Create appropriate content type
     if (options.type === "code") {
-      cellMap.set("content", new Y.Text());
       cellMap.set("language", options.language ?? "python");
-    } else {
-      cellMap.set("content", new Y.XmlFragment());
     }
 
-    // Add to cell data map
+    // Integrate into the doc first
     cellData.set(cellId, cellMap);
+
+    // Now set Y.Text content on the integrated map
+    const integrated = cellData.get(cellId)!;
+    integrated.set("content", new Y.Text());
 
     // Add to cell order array
     if (afterCellId) {
@@ -168,7 +166,7 @@ export function updateCellStatus(
 }
 
 /**
- * Update a cell's type
+ * Update a cell's type (content stays as Y.Text, only metadata changes)
  */
 export function updateCellType(
   ydoc: Y.Doc,
@@ -178,23 +176,13 @@ export function updateCellType(
   const cell = getCell(ydoc, cellId);
   if (!cell) return;
 
-  const currentType = cell.get("type") as CellType;
-  const isCurrentlyCode = currentType === "code";
-  const willBeCode = type === "code";
-
   ydoc.transact(() => {
     cell.set("type", type);
 
-    // If switching between code and non-code, we need to change content type
-    // This is a destructive operation - content will be lost
-    if (isCurrentlyCode !== willBeCode) {
-      if (willBeCode) {
-        cell.set("content", new Y.Text());
-        cell.set("language", "python");
-      } else {
-        cell.set("content", new Y.XmlFragment());
-        cell.delete("language");
-      }
+    if (type === "code") {
+      cell.set("language", "python");
+    } else {
+      cell.delete("language");
     }
   });
 }

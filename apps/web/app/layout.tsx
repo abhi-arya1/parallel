@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Libre_Baskerville } from "next/font/google";
+import { Inter, Source_Serif_4 } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { ConvexClientProvider } from "./providers/convex-client-provider";
@@ -10,11 +10,11 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-const libreBaskerville = Libre_Baskerville({
+const sourceSerif4 = Source_Serif_4({
   subsets: ["latin"],
-  weight: ["400", "700"],
   style: ["normal", "italic"],
-  variable: "--font-libre-baskerville",
+  variable: "--font-source-serif",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -30,7 +30,7 @@ export default function RootLayout({
   return (
     <ConvexAuthNextjsServerProvider>
       <html lang="en" suppressHydrationWarning>
-        <body className={`${inter.variable} ${libreBaskerville.variable}`}>
+        <body className={`${inter.variable} ${sourceSerif4.variable}`}>
           <ConvexClientProvider>
             <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
               {children}

@@ -9,7 +9,10 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as cells from "../cells.js";
 import type * as http from "../http.js";
+import type * as runs from "../runs.js";
+import type * as threads from "../threads.js";
 import type * as users from "../users.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -21,7 +24,10 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  cells: typeof cells;
   http: typeof http;
+  runs: typeof runs;
+  threads: typeof threads;
   users: typeof users;
   workspaces: typeof workspaces;
 }>;

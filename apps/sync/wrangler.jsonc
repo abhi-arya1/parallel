@@ -1,0 +1,45 @@
+/**
+ * Parallel Sync Worker - Y.js document synchronization
+ * Uses y-partyserver for real-time collaboration
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "parallel-sync",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-05",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "nodejs_compat_populate_process_env",
+  ],
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.05,
+    },
+  },
+  "keep_vars": true,
+  "vars": {
+    "BUN_VERSION": "1.3.8",
+  },
+  /**
+   * Durable Objects - each workspace gets a Document instance
+   */
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "Document",
+        "class_name": "Document",
+      },
+    ],
+  },
+  /**
+   * Migrations for Durable Object SQLite storage
+   */
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Document"],
+    },
+  ],
+}

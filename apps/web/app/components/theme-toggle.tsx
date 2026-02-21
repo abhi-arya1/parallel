@@ -17,21 +17,11 @@ export function ThemeToggle() {
     <button
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
       aria-label="Toggle theme"
-      style={{
-        background: "none",
-        border: "1px solid var(--foreground)",
-        borderRadius: 8,
-        padding: 6,
-        cursor: "pointer",
-        color: "var(--foreground)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
+      className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
     >
       <HugeiconsIcon
         icon={resolvedTheme === "dark" ? Sun03Icon : Moon02Icon}
-        size={18}
+        size={16}
       />
     </button>
   );

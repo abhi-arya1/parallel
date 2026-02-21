@@ -16,6 +16,7 @@ import {
 export default function SignInPage() {
   const { signIn } = useAuthActions();
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -27,7 +28,12 @@ export default function SignInPage() {
     setError("");
     setLoading(true);
     try {
-      await signIn("password", { email, password, flow });
+      await signIn("password", {
+        email,
+        password,
+        flow,
+        ...(flow === "signUp" && { name }),
+      });
     } catch {
       setError(
         flow === "signIn"
@@ -93,6 +99,16 @@ export default function SignInPage() {
           </span>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-2.5">
+            {isSignUp && (
+              <Input
+                type="text"
+                placeholder="Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                disabled={loading}
+              />
+            )}
             <Input
               type="email"
               placeholder="Email"

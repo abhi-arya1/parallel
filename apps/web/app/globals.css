@@ -41,7 +41,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-libre-baskerville), ui-serif, Georgia, serif;
+  --font-serif: var(--font-source-serif), ui-serif, Georgia, serif;
 }
 
 :root {
@@ -81,38 +81,53 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.175 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.985 0 0);
-  --sidebar-primary-foreground: oklch(0.205 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  /* Mellow dark theme - slightly warmer and lighter than pure black */
+  --background: oklch(0.16 0.005 260);
+  --foreground: oklch(0.93 0 0);
+  --card: oklch(0.18 0.005 260);
+  --card-foreground: oklch(0.93 0 0);
+  --popover: oklch(0.18 0.005 260);
+  --popover-foreground: oklch(0.93 0 0);
+  --primary: oklch(0.93 0 0);
+  --primary-foreground: oklch(0.18 0 0);
+  --secondary: oklch(0.24 0.005 260);
+  --secondary-foreground: oklch(0.93 0 0);
+  --muted: oklch(0.24 0.005 260);
+  --muted-foreground: oklch(0.65 0 0);
+  --accent: oklch(0.24 0.005 260);
+  --accent-foreground: oklch(0.93 0 0);
+  --destructive: oklch(0.7 0.18 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.28 0.005 260);
+  --input: oklch(0.24 0.005 260);
+  --ring: oklch(0.45 0 0);
+  --chart-1: oklch(0.55 0.2 264);
+  --chart-2: oklch(0.7 0.15 162);
+  --chart-3: oklch(0.77 0.18 70);
+  --chart-4: oklch(0.65 0.24 304);
+  --chart-5: oklch(0.65 0.22 16);
+  --sidebar: oklch(0.14 0.005 260);
+  --sidebar-foreground: oklch(0.93 0 0);
+  --sidebar-primary: oklch(0.93 0 0);
+  --sidebar-primary-foreground: oklch(0.18 0 0);
+  --sidebar-accent: oklch(0.22 0.005 260);
+  --sidebar-accent-foreground: oklch(0.93 0 0);
+  --sidebar-border: oklch(0.26 0.005 260);
+  --sidebar-ring: oklch(0.45 0 0);
+
+  /* Notebook editor colors - slightly warmer */
+  --notebook-bg: oklch(0.18 0.01 260);
+  --cell-bg: oklch(0.16 0.01 260);
+  --cell-bg-hover: oklch(0.19 0.01 260);
+  --code-bg: oklch(0.11 0.01 260);
+  --promoted-bg: oklch(0.14 0.04 170 / 0.2);
+  --pruned-bg: oklch(0.14 0 0 / 0.5);
+
+  /* Agent role colors */
+  --agent-engineer: #4ecdc4;
+  --agent-intern: #ffe66d;
+  --agent-researcher: #a8dadc;
+  --agent-reviewer: #ff6b6b;
 }
 
 html {
@@ -144,4 +159,342 @@ html.dark {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ==========================================================================
+   Notebook Editor Styles
+   ========================================================================== */
+
+/* Cell shimmer animation for pending state */
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.cell-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--cell-bg) 25%,
+    oklch(0.15 0.02 250) 50%,
+    var(--cell-bg) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Cell resolve animation (pending → content) */
+@keyframes cellResolve {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cell-resolving {
+  animation: cellResolve 300ms ease-out;
+}
+
+/* Cell promote animation */
+.cell-promoting {
+  transition:
+    transform 200ms ease-out,
+    box-shadow 200ms ease-out;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* ==========================================================================
+   TipTap Editor Styles
+   ========================================================================== */
+
+.tiptap {
+  outline: none;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--foreground);
+}
+
+.tiptap:focus {
+  outline: none;
+}
+
+.tiptap h1 {
+  font-size: 1.6rem;
+  font-weight: 600;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+}
+
+.tiptap h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: 0.4em;
+  line-height: 1.3;
+}
+
+.tiptap h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.3em;
+  line-height: 1.4;
+}
+
+.tiptap p {
+  margin-bottom: 0.75em;
+}
+
+.tiptap p:last-child {
+  margin-bottom: 0;
+}
+
+.tiptap blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 1rem;
+  color: var(--muted-foreground);
+  font-style: italic;
+  margin: 1em 0;
+}
+
+.tiptap code {
+  background: var(--code-bg);
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.85em;
+}
+
+.tiptap pre {
+  background: var(--code-bg);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.tiptap pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.9em;
+}
+
+.tiptap ul,
+.tiptap ol {
+  padding-left: 1.5rem;
+  margin: 0.5em 0;
+}
+
+.tiptap li {
+  margin: 0.25em 0;
+}
+
+.tiptap ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.tiptap ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.tiptap ul[data-type="taskList"] li input[type="checkbox"] {
+  margin-top: 0.3em;
+}
+
+.tiptap a {
+  color: var(--agent-engineer);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tiptap a:hover {
+  text-decoration-thickness: 2px;
+}
+
+.tiptap hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5em 0;
+}
+
+.tiptap table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+
+.tiptap th,
+.tiptap td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.tiptap th {
+  background: var(--muted);
+  font-weight: 600;
+}
+
+/* Placeholder */
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--muted-foreground);
+  pointer-events: none;
+  height: 0;
+}
+
+/* ==========================================================================
+   KaTeX Math Styles
+   ========================================================================== */
+
+.math-inline {
+  cursor: pointer;
+  padding: 0 0.1em;
+  border-radius: 3px;
+  transition: background 150ms ease;
+}
+
+.math-inline:hover {
+  background: oklch(1 0 0 / 0.05);
+}
+
+.math-block {
+  display: block;
+  text-align: center;
+  padding: 1rem 0;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 150ms ease;
+}
+
+.math-block:hover {
+  background: oklch(1 0 0 / 0.02);
+}
+
+.math-error {
+  color: var(--agent-reviewer);
+  font-size: 0.8em;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* ==========================================================================
+   CodeMirror Overrides
+   ========================================================================== */
+
+.cm-editor {
+  font-size: 14px;
+  background: var(--code-bg) !important;
+}
+
+.cm-editor.cm-focused {
+  outline: none !important;
+}
+
+.cm-scroller {
+  font-family: var(--font-mono, ui-monospace, monospace) !important;
+}
+
+.cm-gutters {
+  background: var(--code-bg) !important;
+  border-right: 1px solid var(--border) !important;
+}
+
+.cm-activeLineGutter {
+  background: oklch(1 0 0 / 0.05) !important;
+}
+
+.cm-activeLine {
+  background: oklch(1 0 0 / 0.03) !important;
+}
+
+/* ==========================================================================
+   Collaboration Cursors
+   ========================================================================== */
+
+.collaboration-cursor__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1px solid;
+  border-right: 1px solid;
+  word-break: normal;
+  pointer-events: none;
+}
+
+.collaboration-cursor__label {
+  position: absolute;
+  top: -1.4em;
+  left: -1px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: normal;
+  user-select: none;
+  color: #fff;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px 3px 3px 0;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Slash Command Menu
+   ========================================================================== */
+
+.slash-command-menu {
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 0.5rem;
+  min-width: 200px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.slash-command-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.slash-command-item:hover,
+.slash-command-item.is-selected {
+  background: var(--accent);
+}
+
+.slash-command-item-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+}
+
+.slash-command-item-content {
+  flex: 1;
+}
+
+.slash-command-item-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.slash-command-item-description {
+  font-size: 12px;
+  color: var(--muted-foreground);
 }

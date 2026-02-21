@@ -1,0 +1,41 @@
+{
+	"name": "parallel-agents",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-02-21",
+	"compatibility_flags": ["nodejs_compat"],
+	"observability": {
+		"enabled": true,
+	},
+
+	// Durable Object bindings for the Agent
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "ChatAgent",
+				"class_name": "ChatAgent",
+			},
+		],
+	},
+
+	// SQLite storage for agent state persistence
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["ChatAgent"],
+		},
+	],
+
+	// Workflows binding
+	"workflows": [
+		{
+			"name": "ChatWorkflow",
+			"class_name": "ChatWorkflow",
+			"binding": "CHAT_WORKFLOW",
+		},
+	],
+
+	// AI Gateway binding
+	"ai": {
+		"binding": "AI",
+	},
+}

@@ -1,0 +1,29 @@
+{
+  "name": "sync",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "bun@1.3.8",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev --port 8383 --inspector-port 8183",
+    "start": "wrangler dev",
+    "cf-typegen": "wrangler types"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.2",
+    "wrangler": "^4.59.1"
+  },
+  "dependencies": {
+    "@tsndr/cloudflare-worker-jwt": "^3.2.1",
+    "@types/lodash.debounce": "^4.0.9",
+    "@types/ms": "^2.1.0",
+    "@types/node": "^25.2.1",
+    "@upstash/redis": "^1.36.1",
+    "lodash.debounce": "^4.0.8",
+    "ms": "^2.1.3",
+    "nanoid": "^5.1.6",
+    "partyserver": "^0.1.0",
+    "y-partyserver": "^1.0.0",
+    "yjs": "^13.6.29"
+  }
+}

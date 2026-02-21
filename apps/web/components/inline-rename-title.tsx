@@ -9,12 +9,15 @@ export function InlineRenameTitle({
   title,
   workspaceId,
   className,
+  editing,
+  onEditingChange,
 }: {
   title: string;
   workspaceId: Id<"workspaces">;
   className?: string;
+  editing: boolean;
+  onEditingChange: (editing: boolean) => void;
 }) {
-  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(title);
   const inputRef = useRef<HTMLInputElement>(null);
   const renameWorkspace = useMutation(api.workspaces.rename);
@@ -37,7 +40,7 @@ export function InlineRenameTitle({
     } else {
       setValue(title);
     }
-    setEditing(false);
+    onEditingChange(false);
   };
 
   if (editing) {
@@ -54,7 +57,7 @@ export function InlineRenameTitle({
           }
           if (e.key === "Escape") {
             setValue(title);
-            setEditing(false);
+            onEditingChange(false);
           }
         }}
         onClick={(e) => e.stopPropagation()}
@@ -67,11 +70,11 @@ export function InlineRenameTitle({
 
   return (
     <p
-      className={`truncate cursor-text hover:underline decoration-foreground/20 underline-offset-2 ${className ?? ""}`}
+      className={`truncate cursor-text font-medium hover:underline decoration-foreground/20 underline-offset-2 ${className ?? ""}`}
       onClick={(e) => {
         e.stopPropagation();
         e.preventDefault();
-        setEditing(true);
+        onEditingChange(true);
       }}
       onMouseDown={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}

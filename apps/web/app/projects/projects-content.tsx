@@ -41,12 +41,15 @@ function InlineRenameTitle({
   title,
   workspaceId,
   className,
+  editing,
+  onEditingChange,
 }: {
   title: string;
   workspaceId: Id<"workspaces">;
   className?: string;
+  editing: boolean;
+  onEditingChange: (editing: boolean) => void;
 }) {
-  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(title);
   const inputRef = useRef<HTMLInputElement>(null);
   const renameWorkspace = useMutation(api.workspaces.rename);
@@ -69,7 +72,7 @@ function InlineRenameTitle({
     } else {
       setValue(title);
     }
-    setEditing(false);
+    onEditingChange(false);
   };
 
   if (editing) {
@@ -86,7 +89,7 @@ function InlineRenameTitle({
           }
           if (e.key === "Escape") {
             setValue(title);
-            setEditing(false);
+            onEditingChange(false);
           }
         }}
         onClick={(e) => e.stopPropagation()}
@@ -99,11 +102,11 @@ function InlineRenameTitle({
 
   return (
     <p
-      className={`truncate cursor-text hover:underline decoration-foreground/20 underline-offset-2 ${className ?? ""}`}
+      className={`truncate cursor-text font-medium hover:underline decoration-foreground/20 underline-offset-2 ${className ?? ""}`}
       onClick={(e) => {
         e.stopPropagation();
         e.preventDefault();
-        setEditing(true);
+        onEditingChange(true);
       }}
       onMouseDown={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
@@ -130,6 +133,7 @@ export function ProjectsContent({
     id: Id<"workspaces">;
     title: string;
   } | null>(null);
+  const [renamingId, setRenamingId] = useState<Id<"workspaces"> | null>(null);
 
   const filtered = workspaces?.filter((w) =>
     w.title.toLowerCase().includes(search.toLowerCase()),

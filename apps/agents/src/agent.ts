@@ -14,7 +14,7 @@ export type ChatState = {
 	currentWorkflowId?: string;
 };
 
-export class ChatAgent extends Agent<Env, ChatState> {
+export class ParallelAgent extends Agent<Env, ChatState> {
 	initialState: ChatState = {
 		messages: [],
 		metadata: {},
@@ -246,7 +246,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
 	private async startChatWorkflow(connection: Connection, params?: { model?: string; systemPrompt?: string }): Promise<void> {
 		try {
 			// Use the base class runWorkflow method
-			const workflowId = await this.runWorkflow('CHAT_WORKFLOW', {
+			const workflowId = await this.runWorkflow('PARALLEL_WORKFLOW', {
 				messages: this.state.messages.map((m) => ({
 					role: m.role,
 					content: m.content,
@@ -283,7 +283,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
 	private async pollWorkflow(connection: Connection, workflowId: string): Promise<void> {
 		try {
 			// Use the base class getWorkflowStatus method
-			const status = await this.getWorkflowStatus('CHAT_WORKFLOW', workflowId);
+			const status = await this.getWorkflowStatus('PARALLEL_WORKFLOW', workflowId);
 
 			if (status.status === 'running') {
 				setTimeout(() => this.pollWorkflow(connection, workflowId), 1000);
@@ -345,7 +345,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
 		}
 
 		try {
-			const status = await this.getWorkflowStatus('CHAT_WORKFLOW', id);
+			const status = await this.getWorkflowStatus('PARALLEL_WORKFLOW', id);
 
 			connection.send(
 				JSON.stringify({
@@ -440,7 +440,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
 	}
 
 	async executeWorkflow(params?: { model?: string; systemPrompt?: string }): Promise<string> {
-		const workflowId = await this.runWorkflow('CHAT_WORKFLOW', {
+		const workflowId = await this.runWorkflow('PARALLEL_WORKFLOW', {
 			messages: this.state.messages.map((m) => ({
 				role: m.role,
 				content: m.content,

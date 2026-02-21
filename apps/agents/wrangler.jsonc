@@ -11,8 +11,8 @@
 	"durable_objects": {
 		"bindings": [
 			{
-				"name": "ChatAgent",
-				"class_name": "ChatAgent",
+				"name": "ParallelAgent",
+				"class_name": "ParallelAgent",
 			},
 		],
 	},
@@ -21,16 +21,16 @@
 	"migrations": [
 		{
 			"tag": "v1",
-			"new_sqlite_classes": ["ChatAgent"],
+			"new_sqlite_classes": ["ParallelAgent"],
 		},
 	],
 
 	// Workflows binding
 	"workflows": [
 		{
-			"name": "ChatWorkflow",
-			"class_name": "ChatWorkflow",
-			"binding": "CHAT_WORKFLOW",
+			"name": "ParallelWorkflow",
+			"class_name": "ParallelWorkflow",
+			"binding": "PARALLEL_WORKFLOW",
 		},
 	],
 

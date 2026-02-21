@@ -1,10 +1,7 @@
 import { routeAgentRequest } from 'agents';
 
-// Export agent classes (required for Durable Objects)
-export { ChatAgent } from './agents/chat';
-
-// Export workflow classes
-export { ChatWorkflow } from './workflows/chat';
+export { ParallelAgent } from './agent';
+export { ParallelWorkflow } from './workflow';
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -28,7 +25,7 @@ export default {
 					systemPrompt?: string;
 				}>();
 
-				const instance = await env.CHAT_WORKFLOW.create({
+				const instance = await env.PARALLEL_WORKFLOW.create({
 					params: {
 						messages: body.messages,
 						model: body.model,
@@ -53,7 +50,7 @@ export default {
 			}
 
 			try {
-				const instance = await env.CHAT_WORKFLOW.get(workflowId);
+				const instance = await env.PARALLEL_WORKFLOW.get(workflowId);
 				const status = await instance.status();
 
 				return Response.json({

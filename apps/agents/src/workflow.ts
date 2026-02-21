@@ -13,7 +13,7 @@ export type ChatWorkflowResult = {
 	tokenCount?: number;
 };
 
-export class ChatWorkflow extends WorkflowEntrypoint<Env, ChatWorkflowParams> {
+export class ParallelWorkflow extends WorkflowEntrypoint<Env, ChatWorkflowParams> {
 	async run(event: WorkflowEvent<ChatWorkflowParams>, step: WorkflowStep): Promise<ChatWorkflowResult> {
 		const { messages, model = 'openai/gpt-4o-mini', systemPrompt } = event.payload;
 

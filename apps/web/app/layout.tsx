@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { ConvexClientProvider } from "./providers/convex-client-provider";
 import "./globals.css";
+import "streamdown/styles.css";
 
 const inter = Inter({
   subsets: ["latin"],

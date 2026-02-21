@@ -3,15 +3,7 @@ import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
 // Cell type validator
-const cellTypeValidator = v.union(
-  v.literal("hypothesis"),
-  v.literal("finding"),
-  v.literal("code"),
-  v.literal("note"),
-  v.literal("dead-end"),
-  v.literal("ablation"),
-  v.literal("synthesis"),
-);
+const cellTypeValidator = v.union(v.literal("markdown"), v.literal("code"));
 
 // Cell status validator
 const cellStatusValidator = v.union(

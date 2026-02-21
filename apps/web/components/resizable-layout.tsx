@@ -50,7 +50,7 @@ export function ResizableLayout({
     <div ref={containerRef} className={cn("flex h-screen", className)}>
       <aside
         style={{ width: `${sidebarWidth}%` }}
-        className="flex-shrink-0 flex flex-col overflow-hidden bg-muted/40 border-r border-border/50"
+        className="flex-shrink-0 flex flex-col overflow-hidden bg-muted/60 border-r border-border"
       >
         {sidebar}
       </aside>
@@ -58,7 +58,7 @@ export function ResizableLayout({
         onMouseDown={handleMouseDown}
         className="w-1 flex-shrink-0 cursor-col-resize"
       />
-      <main className="flex-1 overflow-hidden min-w-0">{children}</main>
+      <main className="flex-1 overflow-hidden min-w-0 bg-background">{children}</main>
     </div>
   );
 }

@@ -10,21 +10,30 @@ export default defineSchema({
     hypothesis: v.string(),
     createdBy: v.id("users"),
     collaborators: v.array(v.id("users")),
+    lastSavedAt: v.optional(v.number()),
+    yjsSnapshotId: v.optional(v.id("_storage")),
+    // GPU type for Modal sandbox execution
+    gpu: v.optional(
+      v.union(
+        v.literal("T4"),
+        v.literal("L4"),
+        v.literal("A10"),
+        v.literal("A100"),
+        v.literal("A100-40GB"),
+        v.literal("A100-80GB"),
+        v.literal("L40S"),
+        v.literal("H100"),
+        v.literal("H200"),
+        v.literal("B200"),
+      ),
+    ),
   }),
 
   cells: defineTable({
     workspaceId: v.id("workspaces"),
     // Y.js cell ID (nanoid) - links Convex record to Y.Doc cell
     yjsCellId: v.string(),
-    type: v.union(
-      v.literal("hypothesis"),
-      v.literal("finding"),
-      v.literal("code"),
-      v.literal("note"),
-      v.literal("dead-end"),
-      v.literal("ablation"),
-      v.literal("synthesis"),
-    ),
+    type: v.union(v.literal("markdown"), v.literal("code")),
     // Content snapshot (for search/history - Y.js is source of truth for live editing)
     content: v.string(),
     authorType: v.union(v.literal("human"), v.literal("agent")),

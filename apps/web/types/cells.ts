@@ -1,14 +1,7 @@
 import type { Id } from "@/convex/_generated/dataModel";
 
 // Cell types supported in the notebook
-export type CellType =
-  | "hypothesis"
-  | "finding"
-  | "code"
-  | "note"
-  | "dead-end"
-  | "ablation"
-  | "synthesis";
+export type CellType = "markdown" | "code";
 
 // Agent roles (matches existing Convex schema)
 export type AgentRole = "engineer" | "intern" | "researcher" | "reviewer";
@@ -63,33 +56,13 @@ export const CELL_TYPE_INFO: Record<
   CellType,
   { label: string; placeholder: string }
 > = {
-  hypothesis: {
-    label: "Hypothesis",
-    placeholder: "State your hypothesis or research question...",
-  },
-  finding: {
-    label: "Finding",
-    placeholder: "Document a finding or observation...",
+  markdown: {
+    label: "Markdown",
+    placeholder: "Write your notes...",
   },
   code: {
     label: "Code",
     placeholder: "# Write your code here",
-  },
-  note: {
-    label: "Note",
-    placeholder: "Add a note or comment...",
-  },
-  "dead-end": {
-    label: "Dead End",
-    placeholder: "Document why this approach didn't work...",
-  },
-  ablation: {
-    label: "Ablation",
-    placeholder: "Document ablation study results...",
-  },
-  synthesis: {
-    label: "Synthesis",
-    placeholder: "Synthesize findings and conclusions...",
   },
 };
 

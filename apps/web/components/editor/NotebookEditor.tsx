@@ -119,7 +119,7 @@ export function NotebookEditor({
 
       return {
         id: cellId,
-        type: (cell.get("type") as CellType) ?? "note",
+        type: (cell.get("type") as CellType) ?? "markdown",
         authorType: (cell.get("authorType") as "human" | "agent") ?? "human",
         authorId: (cell.get("authorId") as string) ?? "",
         agentRole: cell.get("agentRole") as CellMetadata["agentRole"],
@@ -170,43 +170,11 @@ export function NotebookEditor({
       className="flex h-full flex-col"
       style={{ background: "var(--notebook-bg)" }}
     >
-      {/* Connected users indicator */}
-      {connectedUsers.length > 0 && (
-        <div className="flex items-center gap-2 border-b border-border/50 px-4 py-2">
-          <span className="text-xs text-muted-foreground">
-            {connectedUsers.length} other{connectedUsers.length > 1 ? "s" : ""}{" "}
-            viewing
-          </span>
-          <div className="flex -space-x-1">
-            {connectedUsers.slice(0, 5).map((u) => (
-              <div
-                key={u.id}
-                className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-medium text-white"
-                style={{ backgroundColor: u.color ?? "#60A5FA" }}
-                title={u.name ?? "Anonymous"}
-              >
-                {(u.name ?? "?").charAt(0).toUpperCase()}
-              </div>
-            ))}
-            {connectedUsers.length > 5 && (
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[10px] font-medium">
-                +{connectedUsers.length - 5}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Cell list */}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-4xl px-4 py-6">
-          {/* Workspace title */}
-          <h1 className="mb-6 font-serif text-2xl font-semibold text-foreground">
-            {workspace.title}
-          </h1>
-
           {/* Cells */}
-          <div className="space-y-4">
+          <div className="space-y-1">
             {cellIds.map((cellId) => {
               const metadata = getCellMetadataById(cellId);
               if (!metadata) return null;
@@ -227,17 +195,11 @@ export function NotebookEditor({
             })}
           </div>
 
-          {/* Empty state */}
-          {cellIds.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <p className="mb-4 text-muted-foreground">
-                Start your research by adding a hypothesis or note.
-              </p>
-            </div>
-          )}
-
           {/* Footer with add buttons */}
-          <NotebookFooter onInsertCell={handleInsertCell} />
+          <NotebookFooter
+            onInsertCell={handleInsertCell}
+            isEmpty={cellIds.length === 0}
+          />
         </div>
       </div>
     </div>

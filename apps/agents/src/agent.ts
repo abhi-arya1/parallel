@@ -21,6 +21,7 @@ import {
 	type StreamTextOnFinishCallback,
 	type StreamTextOnErrorCallback,
 	generateText,
+  stepCountIs,
 } from "ai";
 import { gateway } from "@ai-sdk/gateway";
 import { nanoid } from "nanoid";
@@ -338,7 +339,7 @@ export class ParallelAgent extends Agent<Env> {
 					type: "finish",
 					conversationId,
 					finishReason: completion.finishReason,
-					totalUsage: completion.totalUsage,
+					totalUsage: completion.totalUsage as { inputTokens: number; outputTokens: number } | undefined,
 				};
 
 				const completed = await this.streamState.complete(
@@ -440,7 +441,7 @@ export class ParallelAgent extends Agent<Env> {
 			model: AGENT_MODEL,
 			messages: messagesWithSystem,
 			tools: options.tools,
-			maxSteps: MAX_CHAT_TURNS,
+			stopWhen: stepCountIs(MAX_CHAT_TURNS),
 			experimental_transform: smoothStream({
 				delayInMs: 20,
 				chunking: "word",

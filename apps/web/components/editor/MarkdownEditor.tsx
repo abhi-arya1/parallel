@@ -5,7 +5,7 @@ import type * as Y from "yjs";
 import type YPartyKitProvider from "y-partykit/provider";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import type { editor as monacoEditor } from "monaco-editor";
-import { MonacoBinding } from "y-monaco";
+import type { MonacoBinding } from "y-monaco";
 import { useTheme } from "next-themes";
 
 import { useCellText } from "@/lib/ydoc-hooks";
@@ -35,13 +35,16 @@ export function MarkdownEditor({
 
   // Bind y-monaco when editor mounts
   const handleEditorMount: OnMount = useCallback(
-    (editor) => {
+    async (editor) => {
       editorRef.current = editor;
 
       if (!ytext || !provider) return;
 
       const model = editor.getModel();
       if (!model) return;
+
+      // Dynamically import y-monaco to avoid SSR issues
+      const { MonacoBinding } = await import("y-monaco");
 
       // Create y-monaco binding with awareness for cursor sync
       bindingRef.current = new MonacoBinding(
@@ -74,12 +77,15 @@ export function MarkdownEditor({
     const model = editorRef.current.getModel();
     if (!model) return;
 
-    bindingRef.current = new MonacoBinding(
-      ytext,
-      model,
-      new Set([editorRef.current]),
-      provider.awareness,
-    );
+    // Dynamically import y-monaco to avoid SSR issues
+    import("y-monaco").then(({ MonacoBinding }) => {
+      bindingRef.current = new MonacoBinding(
+        ytext,
+        model,
+        new Set([editorRef.current!]),
+        provider.awareness,
+      );
+    });
   }, [ytext, provider]);
 
   if (!ytext) {

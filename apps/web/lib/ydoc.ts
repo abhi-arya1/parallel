@@ -46,9 +46,7 @@ export function getCell(
 /**
  * Get cell content (always Y.Text)
  */
-export function getCellContent(
-  cell: Y.Map<unknown>,
-): Y.Text | undefined {
+export function getCellContent(cell: Y.Map<unknown>): Y.Text | undefined {
   return cell.get("content") as Y.Text | undefined;
 }
 
@@ -75,6 +73,7 @@ interface CreateCellOptions {
   agentRole?: AgentRole;
   status?: CellStatus;
   language?: string;
+  initialContent?: string;
 }
 
 /**
@@ -114,7 +113,11 @@ export function createCell(
 
     // Now set Y.Text content on the integrated map
     const integrated = cellData.get(cellId)!;
-    integrated.set("content", new Y.Text());
+    const ytext = new Y.Text();
+    if (options.initialContent) {
+      ytext.insert(0, options.initialContent);
+    }
+    integrated.set("content", ytext);
 
     // Add to cell order array
     if (afterCellId) {

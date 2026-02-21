@@ -2,15 +2,28 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Preloaded, usePreloadedQuery } from "convex/react";
+import { Preloaded, usePreloadedQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { ThemeToggle } from "@/app/components/theme-toggle";
 import { InlineRenameTitle } from "@/components/inline-rename-title";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Door01Icon, AddTeamIcon } from "@hugeicons-pro/core-duotone-rounded";
+import {
+  Door01Icon,
+  AddTeamIcon,
+  CpuIcon,
+} from "@hugeicons-pro/core-duotone-rounded";
 import { cn } from "@/lib/utils";
 import { ShareDialog } from "./share-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 interface ProjectSidebarProps {
   preloadedWorkspace: Preloaded<typeof api.workspaces.get>;
@@ -164,9 +177,72 @@ function ProjectSidebarHeader({
             onOpenChange={setShareOpen}
             onLeave={() => router.push("/projects")}
           />
+
+          {/* GPU Selector */}
+          <GpuSelector workspaceId={workspace._id} currentGpu={workspace.gpu} />
         </>
       )}
     </header>
+  );
+}
+
+const GPU_OPTIONS = [
+  "T4",
+  "L4",
+  "A10",
+  "A100",
+  "A100-40GB",
+  "A100-80GB",
+  "L40S",
+  "H100",
+  "H200",
+  "B200",
+] as const;
+
+function GpuSelector({
+  workspaceId,
+  currentGpu,
+}: {
+  workspaceId: string;
+  currentGpu?: string;
+}) {
+  const setGpu = useMutation(api.workspaces.setGpu);
+  const selectedGpu = currentGpu ?? "T4";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          className="flex items-center justify-between w-full text-sm text-muted-foreground hover:text-foreground h-auto px-2 py-1.5"
+        >
+          <div className="flex items-center gap-2">
+            <HugeiconsIcon icon={CpuIcon} size={18} />
+            Infrastructure
+          </div>
+          <span className="text-xs font-medium">{selectedGpu}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuLabel className="flex items-center gap-2">
+          <img src="/nvidia.svg" alt="NVIDIA" className="size-4" />
+          Select GPU
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup
+          value={selectedGpu}
+          onValueChange={(value) =>
+            setGpu({ workspaceId: workspaceId as any, gpu: value as any })
+          }
+        >
+          {GPU_OPTIONS.map((gpu) => (
+            <DropdownMenuRadioItem key={gpu} value={gpu}>
+              {gpu}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

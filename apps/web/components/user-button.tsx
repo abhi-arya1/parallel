@@ -51,7 +51,7 @@ export function UserButton({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          className={`flex items-center justify-center rounded-full bg-rose-600 dark:bg-rose-500 text-white font-medium hover:bg-rose-500 dark:hover:bg-rose-400 transition-colors overflow-hidden ring-1 ring-rose-500/30 dark:ring-rose-400/30 ${sizeClasses[size]}`}
+          className={`flex items-center justify-center rounded-full font-medium transition-colors overflow-hidden ${sizeClasses[size]} ${!hasImage ? "border border-border" : ""}`}
         >
           {hasImage ? (
             <img

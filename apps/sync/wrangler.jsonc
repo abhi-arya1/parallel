@@ -21,6 +21,7 @@
   "keep_vars": true,
   "vars": {
     "BUN_VERSION": "1.3.8",
+    "CONVEX_URL": "",
   },
   /**
    * Durable Objects - each workspace gets a Document instance

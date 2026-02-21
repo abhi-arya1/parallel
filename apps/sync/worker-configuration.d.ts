@@ -9,6 +9,7 @@ declare namespace Cloudflare {
 	interface Env {
 		BUN_VERSION: "1.3.8";
 		DEVELOPMENT: string;
+		CONVEX_URL: string;
 		INTERNAL_API_KEY: string;
 		Document: DurableObjectNamespace<import("./src/index").Document>;
 	}
@@ -18,7 +19,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "BUN_VERSION" | "DEVELOPMENT" | "INTERNAL_API_KEY">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "BUN_VERSION" | "CONVEX_URL" | "DEVELOPMENT" | "INTERNAL_API_KEY">> {}
 }
 
 // Begin runtime types

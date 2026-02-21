@@ -75,11 +75,13 @@ export const create = mutation({
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
 
+    const now = Date.now();
     return await ctx.db.insert("workspaces", {
       title: args.title,
       hypothesis: args.hypothesis,
       createdBy: userId,
       collaborators: [],
+      lastSavedAt: now,
     });
   },
 });
@@ -211,6 +213,41 @@ export const leaveWorkspace = mutation({
     await ctx.db.patch(args.workspaceId, {
       collaborators: workspace.collaborators.filter((id) => id !== userId),
     });
+  },
+});
+
+export const setGpu = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    gpu: v.optional(
+      v.union(
+        v.literal("T4"),
+        v.literal("L4"),
+        v.literal("A10"),
+        v.literal("A100"),
+        v.literal("A100-40GB"),
+        v.literal("A100-80GB"),
+        v.literal("L40S"),
+        v.literal("H100"),
+        v.literal("H200"),
+        v.literal("B200"),
+      ),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const workspace = await ctx.db.get(args.workspaceId);
+    if (!workspace) throw new Error("Workspace not found");
+    if (
+      workspace.createdBy !== userId &&
+      !workspace.collaborators.includes(userId)
+    ) {
+      throw new Error("Not authorized");
+    }
+
+    await ctx.db.patch(args.workspaceId, { gpu: args.gpu });
   },
 });
 

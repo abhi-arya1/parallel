@@ -5,7 +5,7 @@ import type * as Y from "yjs";
 import type YPartyKitProvider from "y-partykit/provider";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import type { editor as monacoEditor } from "monaco-editor";
-import { MonacoBinding } from "y-monaco";
+import type { MonacoBinding } from "y-monaco";
 import { useTheme } from "next-themes";
 import { Play, ChevronDown } from "lucide-react";
 
@@ -85,13 +85,16 @@ export function CodeCell({
 
   // Bind y-monaco when editor mounts
   const handleEditorMount: OnMount = useCallback(
-    (editor, monaco) => {
+    async (editor, monaco) => {
       editorRef.current = editor;
 
       if (!ytext || !provider) return;
 
       const model = editor.getModel();
       if (!model) return;
+
+      // Dynamically import y-monaco to avoid SSR issues
+      const { MonacoBinding } = await import("y-monaco");
 
       // Create y-monaco binding with awareness for cursor sync
       bindingRef.current = new MonacoBinding(
@@ -135,12 +138,15 @@ export function CodeCell({
     const model = editorRef.current.getModel();
     if (!model) return;
 
-    bindingRef.current = new MonacoBinding(
-      ytext,
-      model,
-      new Set([editorRef.current]),
-      provider.awareness,
-    );
+    // Dynamically import y-monaco to avoid SSR issues
+    import("y-monaco").then(({ MonacoBinding }) => {
+      bindingRef.current = new MonacoBinding(
+        ytext,
+        model,
+        new Set([editorRef.current!]),
+        provider.awareness,
+      );
+    });
   }, [ytext, provider]);
 
   if (!ytext) {
@@ -152,7 +158,7 @@ export function CodeCell({
   return (
     <div className="space-y-2">
       {/* Toolbar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-end gap-2">
         {/* Language selector */}
         <div className="relative">
           <button
@@ -165,7 +171,7 @@ export function CodeCell({
           </button>
 
           {showLanguageMenu && (
-            <div className="absolute left-0 top-full z-50 mt-1 rounded-md border border-border bg-popover p-1 shadow-lg">
+            <div className="absolute right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover p-1 shadow-lg">
               {CODE_LANGUAGES.map((lang) => (
                 <button
                   key={lang.value}
@@ -219,7 +225,7 @@ export function CodeCell({
             lineNumbersMinChars: 3,
             renderLineHighlight: "line",
             wordWrap: "on",
-            padding: { top: 22, bottom: 8 },
+            padding: { top: 22, bottom: 8, right: 16 },
             fontSize: 14,
             fontFamily: "var(--font-mono, ui-monospace, monospace)",
             scrollbar: {

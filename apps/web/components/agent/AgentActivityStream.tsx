@@ -12,7 +12,6 @@ import {
   ArrowUp01Icon,
 } from "@hugeicons-pro/core-duotone-rounded";
 import { MarkdownPreview } from "@/components/editor/MarkdownPreview";
-import { Button } from "@/components/ui/button";
 
 interface Activity {
   id: string;
@@ -33,11 +32,7 @@ interface AgentActivityStreamProps {
   activity: Activity[];
   messages: Message[];
   streamingText?: string;
-  pendingCode?: string;
-  isAwaitingApproval?: boolean;
   isLoading?: boolean;
-  onApprove?: () => void;
-  onReject?: (feedback?: string) => void;
 }
 
 type ToolCard = {
@@ -109,11 +104,7 @@ export function AgentActivityStream({
   activity,
   messages,
   streamingText,
-  pendingCode,
-  isAwaitingApproval,
   isLoading,
-  onApprove,
-  onReject,
 }: AgentActivityStreamProps) {
   const { toolCards, otherActivities } = groupActivitiesIntoToolCards(activity);
 
@@ -131,7 +122,7 @@ export function AgentActivityStream({
 
   items.sort((a, b) => a.timestamp - b.timestamp);
 
-  if (items.length === 0 && !streamingText && !isAwaitingApproval) {
+  if (items.length === 0 && !streamingText && !isLoading) {
     return (
       <div className="flex flex-col h-full p-4">
         <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
@@ -143,19 +134,6 @@ export function AgentActivityStream({
 
   return (
     <div className="p-4 space-y-3">
-      {isAwaitingApproval && onApprove && onReject && (
-        <div className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pt-4 pb-3 bg-background/95 backdrop-blur border-b border-border mb-3">
-          <p className="text-xs font-medium text-orange-500 mb-2">
-            Action requires approval
-          </p>
-          <ApprovalCard
-            code={pendingCode}
-            onApprove={onApprove}
-            onReject={onReject}
-          />
-        </div>
-      )}
-
       {items.map((item, idx) => {
         if (item.type === "activity") {
           return <ActivityItem key={item.data.id} activity={item.data} />;

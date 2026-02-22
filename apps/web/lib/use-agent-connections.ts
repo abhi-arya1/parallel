@@ -273,6 +273,7 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
       const ws = new WebSocket(getWsUrl(role, wsId));
 
       ws.onopen = () => {
+        console.log(`[Agent:${role}] WebSocket connected`);
         updateAgent(role, { connected: true });
         ws.send(JSON.stringify({ type: "sync" }));
       };
@@ -317,7 +318,13 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
   const send = useCallback((role: AgentRole, message: ClientMessage) => {
     const ws = socketsRef.current.get(role);
     if (ws && ws.readyState === WebSocket.OPEN) {
+      console.log(`[Agent:${role}] Sending message:`, message.type);
       ws.send(JSON.stringify(message));
+    } else {
+      console.warn(
+        `[Agent:${role}] Cannot send message, WebSocket not open. State:`,
+        ws?.readyState,
+      );
     }
   }, []);
 

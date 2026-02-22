@@ -7,14 +7,47 @@ import Editor, { type OnMount } from "@monaco-editor/react";
 import type { editor as monacoEditor } from "monaco-editor";
 import type { MonacoBinding } from "y-monaco";
 import { useTheme } from "next-themes";
-import { Play, ChevronDown } from "lucide-react";
+import { Play } from "lucide-react";
+import { useQuery, useMutation } from "convex/react";
 
-import { getCellData } from "@/lib/ydoc";
 import { useCellText } from "@/lib/ydoc-hooks";
-import { CODE_LANGUAGES, type CodeLanguage } from "@/types/cells";
 import type { Id } from "@/convex/_generated/dataModel";
+import { api } from "@/convex/_generated/api";
+import { cn } from "@/lib/utils";
 import { CellOutput } from "./CellOutput";
 import { useMonacoCursorStyles } from "@/lib/use-monaco-cursor-styles";
+import { executeCellStreaming } from "@/lib/sandbox";
+import { Kbd } from "@/components/ui/kbd";
+import { toast } from "sonner";
+
+const MIN_EDITOR_HEIGHT = 60;
+const MAX_EDITOR_HEIGHT = 800;
+const PADDING = 30; // top + bottom padding
+
+// Hook for live elapsed time counter
+function useElapsedTime(isRunning: boolean) {
+  const [elapsed, setElapsed] = useState(0);
+  const startTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (isRunning) {
+      startTimeRef.current = Date.now();
+      setElapsed(0);
+
+      const interval = setInterval(() => {
+        if (startTimeRef.current) {
+          setElapsed(Date.now() - startTimeRef.current);
+        }
+      }, 100);
+
+      return () => clearInterval(interval);
+    } else {
+      startTimeRef.current = null;
+    }
+  }, [isRunning]);
+
+  return elapsed;
+}
 
 interface CodeCellProps {
   cellId: string;
@@ -22,6 +55,7 @@ interface CodeCellProps {
   provider: YPartyKitProvider | null;
   language: string;
   workspaceId: Id<"workspaces">;
+  isRunningExternal?: boolean;
 }
 
 export function CodeCell({
@@ -30,79 +64,164 @@ export function CodeCell({
   provider,
   language: initialLanguage,
   workspaceId,
+  isRunningExternal = false,
 }: CodeCellProps) {
   const editorRef = useRef<monacoEditor.IStandaloneCodeEditor | null>(null);
   const bindingRef = useRef<MonacoBinding | null>(null);
   const { resolvedTheme } = useTheme();
 
-  const [language, setLanguage] = useState<CodeLanguage>(
-    (initialLanguage as CodeLanguage) || "python",
-  );
-  const [showLanguageMenu, setShowLanguageMenu] = useState(false);
+  const language = "python";
   const [isRunning, setIsRunning] = useState(false);
-  const [outputs, setOutputs] = useState<
+  const [localOutputs, setLocalOutputs] = useState<
     Array<{ type: string; content: string }>
   >([]);
+  const [lastRunTime, setLastRunTime] = useState<number | null>(null);
+  const [editorHeight, setEditorHeight] = useState(MIN_EDITOR_HEIGHT);
 
   const ytext = useCellText(ydoc, cellId);
+
+  // Combined running state (local run or external Run All)
+  const isExecuting = isRunning || isRunningExternal;
+
+  // Live elapsed time counter while running
+  const elapsed = useElapsedTime(isExecuting);
+
+  // Subscribe to cell outputs from Convex (real-time updates)
+  const convexData = useQuery(api.cells.getOutputs, { yjsCellId: cellId });
+  const clearOutputsMutation = useMutation(api.cells.clearOutputs);
+  const updateRunTimeMutation = useMutation(api.cells.updateRunTime);
+
+  // Extract outputs and persisted run time from Convex
+  const convexOutputs = convexData?.outputs ?? [];
+  const persistedRunTime = convexData?.lastRunTimeMs ?? null;
+
+  // Merge local outputs (immediate feedback) with Convex outputs (persisted)
+  // Local outputs take priority while running, then Convex takes over after sync
+  const outputs =
+    localOutputs.length > 0
+      ? localOutputs
+      : convexOutputs.map((o) => ({
+          type: o.type,
+          content: o.content,
+        }));
+
+  // Use local run time while running, otherwise use persisted
+  const displayRunTime = lastRunTime ?? persistedRunTime;
+
+  // Clear outputs handler
+  const handleClearOutputs = useCallback(() => {
+    setLocalOutputs([]);
+    clearOutputsMutation({ yjsCellId: cellId });
+    toast.success("Outputs cleared");
+  }, [cellId, clearOutputsMutation]);
 
   // Set up cursor styles for collaboration
   useMonacoCursorStyles(provider?.awareness ?? null, editorRef.current);
 
-  // Update language in Y.js when changed
-  const handleLanguageChange = useCallback(
-    (newLang: CodeLanguage) => {
-      setLanguage(newLang);
-      setShowLanguageMenu(false);
-
-      const cellData = getCellData(ydoc);
-      const cell = cellData.get(cellId);
-      if (cell) {
-        cell.set("language", newLang);
-      }
-    },
-    [ydoc, cellId],
-  );
-
-  // Run cell handler (placeholder)
-  const handleRun = useCallback(() => {
+  // Run cell handler - calls the sandbox server with streaming
+  const handleRun = useCallback(async () => {
     if (!ytext) return;
 
-    setIsRunning(true);
-    setOutputs([]);
+    // Skip empty cells
+    const code = ytext.toString().trim();
+    if (!code) {
+      toast.info("Cell is empty");
+      return;
+    }
 
-    const code = ytext.toString();
-    setTimeout(() => {
-      setOutputs([
+    const startTime = Date.now();
+    setIsRunning(true);
+    setLocalOutputs([]);
+    setLastRunTime(null);
+
+    // Accumulator for streaming stdout
+    let stdoutAccumulator = "";
+
+    try {
+      await executeCellStreaming(workspaceId, cellId, {
+        onStdout: (data) => {
+          stdoutAccumulator += data;
+          setLocalOutputs((prev) => {
+            // Update or create stdout output
+            const existing = prev.find((o) => o.type === "stdout");
+            if (existing) {
+              return prev.map((o) =>
+                o.type === "stdout" ? { ...o, content: stdoutAccumulator } : o,
+              );
+            }
+            return [...prev, { type: "stdout", content: stdoutAccumulator }];
+          });
+        },
+        onStderr: (data) => {
+          setLocalOutputs((prev) => [
+            ...prev,
+            { type: "stderr", content: data },
+          ]);
+        },
+        onImage: (dataUrl) => {
+          setLocalOutputs((prev) => [
+            ...prev,
+            { type: "image", content: dataUrl },
+          ]);
+        },
+        onResult: (result) => {
+          setLocalOutputs((prev) => [
+            ...prev,
+            { type: result.type, content: result.content },
+          ]);
+        },
+        onError: (error) => {
+          setLocalOutputs((prev) => [
+            ...prev,
+            { type: "error", content: error },
+          ]);
+        },
+        onDone: () => {
+          const runTime = Date.now() - startTime;
+          setLastRunTime(runTime);
+          setIsRunning(false);
+          // Persist run time to Convex
+          updateRunTimeMutation({ yjsCellId: cellId, runTimeMs: runTime });
+        },
+      });
+    } catch (error) {
+      setLocalOutputs((prev) => [
+        ...prev,
         {
-          type: "stdout",
-          content: `# Running ${language} code...\n${code}\n\n[Execution not implemented - connect to Modal for real execution]`,
+          type: "error",
+          content: `Failed to execute: ${error instanceof Error ? error.message : "Unknown error"}`,
         },
       ]);
+      setLastRunTime(Date.now() - startTime);
       setIsRunning(false);
-    }, 500);
-  }, [ytext, language]);
+    }
+  }, [ytext, workspaceId, cellId, updateRunTimeMutation]);
 
-  // Bind y-monaco when editor mounts
+  // Update editor height based on content
+  const updateEditorHeight = useCallback(
+    (editor: monacoEditor.IStandaloneCodeEditor) => {
+      const contentHeight = editor.getContentHeight();
+      const newHeight = Math.min(
+        Math.max(contentHeight + PADDING, MIN_EDITOR_HEIGHT),
+        MAX_EDITOR_HEIGHT,
+      );
+      setEditorHeight(newHeight);
+    },
+    [],
+  );
+
+  // Set up editor when it mounts (binding handled separately in useEffect)
   const handleEditorMount: OnMount = useCallback(
-    async (editor, monaco) => {
+    (editor, monaco) => {
       editorRef.current = editor;
 
-      if (!ytext || !provider) return;
+      // Set up content height listener for auto-sizing
+      editor.onDidContentSizeChange(() => {
+        updateEditorHeight(editor);
+      });
 
-      const model = editor.getModel();
-      if (!model) return;
-
-      // Dynamically import y-monaco to avoid SSR issues
-      const { MonacoBinding } = await import("y-monaco");
-
-      // Create y-monaco binding with awareness for cursor sync
-      bindingRef.current = new MonacoBinding(
-        ytext,
-        model,
-        new Set([editor]),
-        provider.awareness,
-      );
+      // Initial height calculation
+      updateEditorHeight(editor);
 
       // Add keyboard shortcuts for running
       editor.addAction({
@@ -111,35 +230,45 @@ export function CodeCell({
         keybindings: [
           monaco.KeyMod.Shift | monaco.KeyCode.Enter,
           monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+          monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyR,
         ],
-        run: () => handleRun(),
+        run: () => {
+          handleRun();
+        },
       });
     },
-    [ytext, provider, handleRun],
+    [handleRun, updateEditorHeight],
   );
 
-  // Clean up binding on unmount
+  // Clean up binding and editor on unmount
   useEffect(() => {
     return () => {
-      bindingRef.current?.destroy();
-      bindingRef.current = null;
+      if (bindingRef.current) {
+        bindingRef.current.destroy();
+        bindingRef.current = null;
+      }
+      if (editorRef.current) {
+        editorRef.current.dispose();
+        editorRef.current = null;
+      }
     };
   }, []);
 
-  // Re-bind when ytext or provider becomes available after initial mount
+  // Create y-monaco binding when ytext, provider, and editor are all available
   useEffect(() => {
     if (!ytext || !editorRef.current || !provider) return;
 
-    // Destroy existing binding if any
-    if (bindingRef.current) {
-      bindingRef.current.destroy();
-    }
+    // Skip if binding already exists for this ytext
+    if (bindingRef.current) return;
 
     const model = editorRef.current.getModel();
     if (!model) return;
 
     // Dynamically import y-monaco to avoid SSR issues
     import("y-monaco").then(({ MonacoBinding }) => {
+      // Double-check we still need to create it (async race condition)
+      if (bindingRef.current) return;
+
       bindingRef.current = new MonacoBinding(
         ytext,
         model,
@@ -149,6 +278,13 @@ export function CodeCell({
     });
   }, [ytext, provider]);
 
+  // Clear local outputs when Convex outputs update (they're now persisted)
+  useEffect(() => {
+    if (convexOutputs?.length) {
+      setLocalOutputs([]);
+    }
+  }, [convexOutputs]);
+
   if (!ytext) {
     return (
       <div className="text-sm text-muted-foreground">Loading editor...</div>
@@ -156,42 +292,16 @@ export function CodeCell({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="group space-y-2">
       {/* Toolbar */}
       <div className="flex items-center justify-end gap-2">
-        {/* Language selector */}
-        <div className="relative">
-          <button
-            onClick={() => setShowLanguageMenu(!showLanguageMenu)}
-            className="flex items-center gap-1 rounded border border-border/50 bg-transparent px-2 py-1 text-xs text-muted-foreground hover:border-border hover:text-foreground"
-          >
-            {CODE_LANGUAGES.find((l) => l.value === language)?.label ??
-              language}
-            <ChevronDown className="h-3 w-3" />
-          </button>
-
-          {showLanguageMenu && (
-            <div className="absolute right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover p-1 shadow-lg">
-              {CODE_LANGUAGES.map((lang) => (
-                <button
-                  key={lang.value}
-                  onClick={() => handleLanguageChange(lang.value)}
-                  className="block w-full rounded-sm px-3 py-1.5 text-left text-sm hover:bg-accent"
-                >
-                  {lang.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
         {/* Run button */}
         <button
           onClick={handleRun}
-          disabled={isRunning}
-          className="flex items-center gap-1 rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          disabled={isExecuting}
+          className="flex h-6 items-center gap-1 rounded bg-emerald-600 px-2.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          {isRunning ? (
+          {isExecuting ? (
             <>
               <div className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
               Running...
@@ -200,18 +310,24 @@ export function CodeCell({
             <>
               <Play className="h-3 w-3" />
               Run
+              <Kbd
+                keys="command"
+                className="ml-1 bg-white/15 border-white/20 text-white/90"
+              >
+                R
+              </Kbd>
             </>
           )}
         </button>
       </div>
 
-      {/* Monaco Editor */}
+      {/* Monaco Editor + Output - single container */}
       <div
         className="overflow-hidden rounded-md border border-border/50"
         style={{ background: "var(--code-bg)" }}
       >
         <Editor
-          height="200px"
+          height={`${editorHeight}px`}
           language={language}
           theme={resolvedTheme === "dark" ? "vs-dark" : "light"}
           onMount={handleEditorMount}
@@ -225,13 +341,15 @@ export function CodeCell({
             lineNumbersMinChars: 3,
             renderLineHighlight: "line",
             wordWrap: "on",
-            padding: { top: 22, bottom: 8, right: 16 },
+            padding: { top: 22, bottom: 8 },
             fontSize: 14,
             fontFamily: "var(--font-mono, ui-monospace, monospace)",
             scrollbar: {
               vertical: "auto",
-              horizontal: "hidden",
-              verticalScrollbarSize: 8,
+              horizontal: "auto",
+              verticalScrollbarSize: 10,
+              horizontalScrollbarSize: 10,
+              useShadows: false,
             },
             overviewRulerLanes: 0,
             hideCursorInOverviewRuler: true,
@@ -239,10 +357,16 @@ export function CodeCell({
             automaticLayout: true,
           }}
         />
+        {(outputs.length > 0 || isExecuting || displayRunTime !== null) && (
+          <CellOutput
+            outputs={outputs}
+            onClear={handleClearOutputs}
+            isRunning={isExecuting}
+            elapsedTime={elapsed}
+            lastRunTime={displayRunTime}
+          />
+        )}
       </div>
-
-      {/* Outputs */}
-      {outputs.length > 0 && <CellOutput outputs={outputs} />}
     </div>
   );
 }

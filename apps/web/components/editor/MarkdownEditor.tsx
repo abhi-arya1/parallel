@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import type * as Y from "yjs";
 import type YPartyKitProvider from "y-partykit/provider";
 import Editor, { type OnMount } from "@monaco-editor/react";
@@ -10,6 +10,10 @@ import { useTheme } from "next-themes";
 
 import { useCellText } from "@/lib/ydoc-hooks";
 import { useMonacoCursorStyles } from "@/lib/use-monaco-cursor-styles";
+
+const MIN_EDITOR_HEIGHT = 60;
+const MAX_EDITOR_HEIGHT = 800;
+const PADDING = 30;
 
 interface MarkdownEditorProps {
   cellId: string;
@@ -27,16 +31,38 @@ export function MarkdownEditor({
   const editorRef = useRef<monacoEditor.IStandaloneCodeEditor | null>(null);
   const bindingRef = useRef<MonacoBinding | null>(null);
   const { resolvedTheme } = useTheme();
+  const [editorHeight, setEditorHeight] = useState(MIN_EDITOR_HEIGHT);
 
   const ytext = useCellText(ydoc, cellId);
 
   // Set up cursor styles for collaboration
   useMonacoCursorStyles(provider?.awareness ?? null, editorRef.current);
 
+  // Update editor height based on content
+  const updateEditorHeight = useCallback(
+    (editor: monacoEditor.IStandaloneCodeEditor) => {
+      const contentHeight = editor.getContentHeight();
+      const newHeight = Math.min(
+        Math.max(contentHeight + PADDING, MIN_EDITOR_HEIGHT),
+        MAX_EDITOR_HEIGHT,
+      );
+      setEditorHeight(newHeight);
+    },
+    [],
+  );
+
   // Bind y-monaco when editor mounts
   const handleEditorMount: OnMount = useCallback(
     async (editor) => {
       editorRef.current = editor;
+
+      // Set up content height listener for auto-sizing
+      editor.onDidContentSizeChange(() => {
+        updateEditorHeight(editor);
+      });
+
+      // Initial height calculation
+      updateEditorHeight(editor);
 
       if (!ytext || !provider) return;
 
@@ -54,7 +80,7 @@ export function MarkdownEditor({
         provider.awareness,
       );
     },
-    [ytext, provider],
+    [ytext, provider, updateEditorHeight],
   );
 
   // Clean up binding on unmount
@@ -100,7 +126,7 @@ export function MarkdownEditor({
       style={{ background: "var(--code-bg)" }}
     >
       <Editor
-        height="200px"
+        height={`${editorHeight}px`}
         language="markdown"
         theme={resolvedTheme === "dark" ? "vs-dark" : "light"}
         onMount={handleEditorMount}
@@ -120,8 +146,10 @@ export function MarkdownEditor({
           fontFamily: "var(--font-mono, ui-monospace, monospace)",
           scrollbar: {
             vertical: "auto",
-            horizontal: "hidden",
-            verticalScrollbarSize: 8,
+            horizontal: "auto",
+            verticalScrollbarSize: 10,
+            horizontalScrollbarSize: 10,
+            useShadows: false,
           },
           overviewRulerLanes: 0,
           hideCursorInOverviewRuler: true,

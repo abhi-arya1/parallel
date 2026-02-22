@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, X } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, Copy01Icon } from "@hugeicons-pro/core-duotone-rounded";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface Output {
   type: string;
@@ -12,178 +15,239 @@ interface Output {
 interface CellOutputProps {
   outputs: Output[];
   onClear?: () => void;
+  isRunning?: boolean;
+  elapsedTime?: number;
+  lastRunTime?: number | null;
 }
 
-export function CellOutput({ outputs, onClear }: CellOutputProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [expandedOutputs, setExpandedOutputs] = useState<Set<number>>(
-    new Set([0]),
-  );
+// Format milliseconds to readable string
+function formatTime(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = (seconds % 60).toFixed(0);
+  return `${minutes}m ${remainingSeconds}s`;
+}
 
-  const toggleOutput = (index: number) => {
-    const newExpanded = new Set(expandedOutputs);
-    if (newExpanded.has(index)) {
-      newExpanded.delete(index);
-    } else {
-      newExpanded.add(index);
-    }
-    setExpandedOutputs(newExpanded);
+export function CellOutput({
+  outputs,
+  onClear,
+  isRunning,
+  elapsedTime,
+  lastRunTime,
+}: CellOutputProps) {
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  // Show timer even if no outputs yet (when running)
+  const hasTimer = isRunning || lastRunTime !== null;
+
+  if (outputs.length === 0 && !hasTimer) return null;
+
+  // Separate images/dataframes from terminal output
+  const terminalOutputs = outputs.filter(
+    (o) => o.type !== "image" && o.type !== "dataframe",
+  );
+  const images = outputs.filter((o) => o.type === "image");
+  const dataframes = outputs.filter((o) => o.type === "dataframe");
+
+  // Combine all terminal output into a single stream
+  const terminalContent = terminalOutputs
+    .map((o) => ({ type: o.type, content: o.content }))
+    .filter((o) => o.content.trim() !== "");
+
+  // Count total lines
+  const totalLines = terminalContent.reduce(
+    (acc, o) => acc + o.content.split("\n").length,
+    0,
+  );
+  const shouldTruncate = totalLines > 30;
+
+  // Copy all text outputs to clipboard
+  const handleCopy = () => {
+    const text = terminalContent.map((o) => o.content).join("\n");
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard");
   };
 
-  if (outputs.length === 0) return null;
-
   return (
-    <div
-      className="rounded-md border border-border/50 overflow-hidden"
-      style={{ background: "var(--code-bg)" }}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/50 px-3 py-1.5">
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          {isExpanded ? (
-            <ChevronDown className="h-3 w-3" />
-          ) : (
-            <ChevronRight className="h-3 w-3" />
+    <div className="group/output relative border-t border-border/30">
+      {/* Header with timer and action buttons */}
+      <div className="flex items-center justify-between px-4 py-1.5">
+        {/* Timer */}
+        <div className="flex items-center gap-2">
+          {isRunning ? (
+            <div className="h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-muted-foreground border-t-transparent" />
+          ) : hasTimer ? (
+            <Check className="h-4 w-4 text-green-500" />
+          ) : null}
+          {hasTimer && (
+            <span className="text-[10px] text-muted-foreground tabular-nums">
+              {isRunning
+                ? formatTime(elapsedTime ?? 0)
+                : formatTime(lastRunTime!)}
+            </span>
           )}
-          Output ({outputs.length})
-        </button>
-        {onClear && (
-          <button
-            onClick={onClear}
-            className="text-muted-foreground hover:text-foreground"
-            title="Clear outputs"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover/output:opacity-100">
+          {terminalContent.length > 0 && (
+            <button
+              onClick={handleCopy}
+              className="rounded p-1 text-muted-foreground/50 hover:bg-muted hover:text-muted-foreground"
+              title="Copy output"
+            >
+              <HugeiconsIcon icon={Copy01Icon} size={14} />
+            </button>
+          )}
+          {onClear && (
+            <button
+              onClick={onClear}
+              className="rounded p-1 text-muted-foreground/50 hover:bg-muted hover:text-muted-foreground"
+              title="Clear outputs"
+            >
+              <HugeiconsIcon icon={Cancel01Icon} size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Output content */}
-      {isExpanded && (
-        <div className="max-h-[400px] overflow-y-auto">
-          {outputs.map((output, index) => (
-            <OutputBlock
-              key={index}
-              output={output}
-              isExpanded={expandedOutputs.has(index)}
-              onToggle={() => toggleOutput(index)}
-              isLast={index === outputs.length - 1}
-            />
-          ))}
+      {/* No output indicator */}
+      {outputs.length === 0 && !isRunning && hasTimer && (
+        <div className="px-4 py-2 text-[11px] text-muted-foreground/60 italic">
+          No output
         </div>
       )}
-    </div>
-  );
-}
 
-interface OutputBlockProps {
-  output: Output;
-  isExpanded: boolean;
-  onToggle: () => void;
-  isLast: boolean;
-}
-
-function OutputBlock({
-  output,
-  isExpanded,
-  onToggle,
-  isLast,
-}: OutputBlockProps) {
-  const isError = output.type === "stderr" || output.type === "error";
-  const isImage = output.type === "image";
-  const isDataframe = output.type === "dataframe";
-
-  // Count lines
-  const lines = output.content.split("\n");
-  const lineCount = lines.length;
-  const shouldTruncate = lineCount > 20;
-  const displayContent =
-    shouldTruncate && !isExpanded
-      ? lines.slice(0, 20).join("\n") + "\n..."
-      : output.content;
-
-  if (isImage) {
-    return (
-      <div className={cn("p-3", !isLast && "border-b border-border/30")}>
-        <img
-          src={`data:image/png;base64,${output.content}`}
-          alt="Output"
-          className="max-h-[300px] rounded"
-        />
-      </div>
-    );
-  }
-
-  if (isDataframe) {
-    try {
-      const data = JSON.parse(output.content);
-      return (
+      {/* Terminal output area */}
+      {terminalContent.length > 0 && (
         <div
           className={cn(
-            "overflow-x-auto p-3",
-            !isLast && "border-b border-border/30",
+            "overflow-y-auto px-4 py-2 font-mono text-[11px] leading-normal",
+            shouldTruncate && !isExpanded && "max-h-[300px]",
           )}
         >
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border/50">
-                {Object.keys(data[0] || {}).map((key) => (
-                  <th
-                    key={key}
-                    className="px-2 py-1 text-left font-medium text-muted-foreground"
-                  >
-                    {key}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data
-                .slice(0, 10)
-                .map((row: Record<string, unknown>, i: number) => (
-                  <tr key={i} className="border-b border-border/30">
-                    {Object.values(row).map((val, j) => (
-                      <td key={j} className="px-2 py-1">
-                        {String(val)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-          {data.length > 10 && (
-            <div className="mt-2 text-xs text-muted-foreground">
-              Showing 10 of {data.length} rows
-            </div>
+          {terminalContent.map((output, index) => (
+            <TerminalLine key={index} output={output} />
+          ))}
+
+          {shouldTruncate && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <ChevronDown
+                className={cn(
+                  "h-3 w-3 transition-transform",
+                  isExpanded && "rotate-180",
+                )}
+              />
+              {isExpanded ? "Show less" : `Show all ${totalLines} lines`}
+            </button>
           )}
         </div>
-      );
-    } catch {
-      // Fall through to text rendering
-    }
-  }
-
-  return (
-    <div className={cn(!isLast && "border-b border-border/30")}>
-      <pre
-        className={cn(
-          "overflow-x-auto p-3 text-xs font-mono whitespace-pre-wrap",
-          isError && "text-red-400 border-l-2 border-red-500",
-        )}
-      >
-        {displayContent}
-      </pre>
-      {shouldTruncate && (
-        <button
-          onClick={onToggle}
-          className="w-full border-t border-border/30 px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent/50"
-        >
-          {isExpanded ? "Show less" : `Show all ${lineCount} lines`}
-        </button>
       )}
+
+      {/* Images - rendered below terminal */}
+      {images.length > 0 && (
+        <div className="flex flex-wrap gap-3 px-4 py-3">
+          {images.map((img, index) => {
+            const imgSrc = img.content.startsWith("data:")
+              ? img.content
+              : `data:image/png;base64,${img.content}`;
+            return (
+              <img
+                key={index}
+                src={imgSrc}
+                alt="Output"
+                className="max-h-[400px] rounded-md"
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Dataframes - rendered as tables */}
+      {dataframes.map((df, index) => (
+        <DataframeTable key={index} content={df.content} />
+      ))}
     </div>
   );
+}
+
+interface TerminalLineProps {
+  output: { type: string; content: string };
+}
+
+function TerminalLine({ output }: TerminalLineProps) {
+  const isError = output.type === "stderr" || output.type === "error";
+  const isResult = output.type === "result";
+
+  // Render content with preserved whitespace
+  return (
+    <span
+      className={cn(
+        "whitespace-pre-wrap",
+        isError && "text-red-500 dark:text-red-400",
+        isResult && "text-blue-600 dark:text-blue-400",
+        !isError && !isResult && "text-foreground/80",
+      )}
+    >
+      {output.content}
+    </span>
+  );
+}
+
+interface DataframeTableProps {
+  content: string;
+}
+
+function DataframeTable({ content }: DataframeTableProps) {
+  try {
+    const data = JSON.parse(content);
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    return (
+      <div className="overflow-x-auto px-4 py-3">
+        <table className="w-full text-xs font-mono">
+          <thead>
+            <tr className="border-b border-border/50">
+              {Object.keys(data[0] || {}).map((key) => (
+                <th
+                  key={key}
+                  className="px-3 py-2 text-left font-medium text-muted-foreground"
+                >
+                  {key}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data
+              .slice(0, 10)
+              .map((row: Record<string, unknown>, i: number) => (
+                <tr
+                  key={i}
+                  className="border-b border-border/20 transition-colors hover:bg-muted/30"
+                >
+                  {Object.values(row).map((val, j) => (
+                    <td key={j} className="px-3 py-1.5">
+                      {String(val)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+          </tbody>
+        </table>
+        {data.length > 10 && (
+          <div className="mt-2 text-xs text-muted-foreground">
+            Showing 10 of {data.length} rows
+          </div>
+        )}
+      </div>
+    );
+  } catch {
+    return null;
+  }
 }

@@ -69,7 +69,6 @@ export const list = query({
 export const create = mutation({
   args: {
     title: v.string(),
-    hypothesis: v.string(),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -78,7 +77,6 @@ export const create = mutation({
     const now = Date.now();
     return await ctx.db.insert("workspaces", {
       title: args.title,
-      hypothesis: args.hypothesis,
       createdBy: userId,
       collaborators: [],
       lastSavedAt: now,
@@ -247,7 +245,17 @@ export const setGpu = mutation({
       throw new Error("Not authorized");
     }
 
-    await ctx.db.patch(args.workspaceId, { gpu: args.gpu });
+    // Clear the kernel sandbox ID when GPU changes - the old kernel needs to be terminated
+    // The frontend will call the sandbox server to actually terminate it
+    const oldKernelId = workspace.kernelSandboxId;
+
+    await ctx.db.patch(args.workspaceId, {
+      gpu: args.gpu,
+      kernelSandboxId: undefined,
+    });
+
+    // Return the old kernel ID so the frontend can terminate it
+    return { oldKernelId };
   },
 });
 

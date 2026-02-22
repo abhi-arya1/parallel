@@ -16,7 +16,6 @@ const cellStatusValidator = v.union(
 // Agent role validator
 const agentRoleValidator = v.union(
   v.literal("engineer"),
-  v.literal("intern"),
   v.literal("researcher"),
   v.literal("reviewer"),
 );
@@ -298,7 +297,7 @@ export const remove = mutation({
 });
 
 /**
- * Get outputs for a cell
+ * Get outputs for a cell (includes lastRunTimeMs)
  */
 export const getOutputs = query({
   args: {
@@ -306,29 +305,57 @@ export const getOutputs = query({
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    if (!userId) return null;
 
     const cell = await ctx.db
       .query("cells")
       .withIndex("by_yjs_cell_id", (q) => q.eq("yjsCellId", args.yjsCellId))
       .first();
 
-    if (!cell) return [];
+    if (!cell) return null;
 
     // Verify access
     const workspace = await ctx.db.get(cell.workspaceId);
-    if (!workspace) return [];
+    if (!workspace) return null;
     if (
       workspace.createdBy !== userId &&
       !workspace.collaborators.includes(userId)
     ) {
-      return [];
+      return null;
     }
 
-    return await ctx.db
+    const outputs = await ctx.db
       .query("cell_outputs")
       .withIndex("by_cell", (q) => q.eq("cellId", cell._id))
       .collect();
+
+    return {
+      outputs,
+      lastRunTimeMs: cell.lastRunTimeMs,
+    };
+  },
+});
+
+/**
+ * Update the last run time for a cell
+ */
+export const updateRunTime = mutation({
+  args: {
+    yjsCellId: v.string(),
+    runTimeMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const cell = await ctx.db
+      .query("cells")
+      .withIndex("by_yjs_cell_id", (q) => q.eq("yjsCellId", args.yjsCellId))
+      .first();
+
+    if (!cell) return;
+
+    await ctx.db.patch(cell._id, {
+      lastRunTimeMs: args.runTimeMs,
+      updatedAt: Date.now(),
+    });
   },
 });
 
@@ -413,6 +440,47 @@ export const clearOutputs = mutation({
 
     for (const output of outputs) {
       await ctx.db.delete(output._id);
+    }
+  },
+});
+
+/**
+ * Clear all outputs for all cells in a workspace
+ */
+export const clearAllOutputs = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    // Verify access
+    const workspace = await ctx.db.get(args.workspaceId);
+    if (!workspace) throw new Error("Workspace not found");
+    if (
+      workspace.createdBy !== userId &&
+      !workspace.collaborators.includes(userId)
+    ) {
+      throw new Error("Not authorized");
+    }
+
+    // Get all cells for this workspace
+    const cells = await ctx.db
+      .query("cells")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    // Delete all outputs for each cell
+    for (const cell of cells) {
+      const outputs = await ctx.db
+        .query("cell_outputs")
+        .withIndex("by_cell", (q) => q.eq("cellId", cell._id))
+        .collect();
+
+      for (const output of outputs) {
+        await ctx.db.delete(output._id);
+      }
     }
   },
 });

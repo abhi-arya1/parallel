@@ -18,6 +18,7 @@
 	"dependencies": {
 		"@ai-sdk/gateway": "^3.0.53",
 		"@repo/agent-kit": "*",
+		"@supermemory/tools": "^1.4.0",
 		"agents": "^0.5.1",
 		"ai": "^6.0.97",
 		"drizzle-orm": "^0.45.0",

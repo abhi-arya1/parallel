@@ -86,7 +86,6 @@ export function ProjectsContent({
             onClick={async () => {
               const id = await createWorkspace({
                 title: "Untitled Project",
-                hypothesis: "",
               });
               router.push(`/projects/${id}`);
             }}
@@ -112,7 +111,6 @@ export function ProjectsContent({
               onClick={async () => {
                 const id = await createWorkspace({
                   title: "Untitled Project",
-                  hypothesis: "",
                 });
                 router.push(`/projects/${id}`);
               }}

@@ -13,7 +13,6 @@ const cellStatusValidator = v.union(
 
 const agentRoleValidator = v.union(
   v.literal("engineer"),
-  v.literal("intern"),
   v.literal("researcher"),
   v.literal("reviewer"),
 );
@@ -161,6 +160,52 @@ export const getWorkspaceGpu = query({
 });
 
 /**
+ * Get the kernel sandbox ID for a workspace (used by sandbox server).
+ * Validates via INTERNAL_API_KEY — no user auth required.
+ */
+export const getWorkspaceKernel = query({
+  args: {
+    syncKey: v.string(),
+    workspaceId: v.id("workspaces"),
+  },
+  handler: async (ctx, args) => {
+    const expectedKey = process.env.INTERNAL_API_KEY;
+    if (!expectedKey || args.syncKey !== expectedKey) {
+      throw new Error("Invalid sync key");
+    }
+
+    const workspace = await ctx.db.get(args.workspaceId);
+    if (!workspace) {
+      throw new Error("Workspace not found");
+    }
+
+    return workspace.kernelSandboxId ?? null;
+  },
+});
+
+/**
+ * Set the kernel sandbox ID for a workspace (used by sandbox server).
+ * Validates via INTERNAL_API_KEY — no user auth required.
+ */
+export const setWorkspaceKernel = mutation({
+  args: {
+    syncKey: v.string(),
+    workspaceId: v.id("workspaces"),
+    sandboxId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const expectedKey = process.env.INTERNAL_API_KEY;
+    if (!expectedKey || args.syncKey !== expectedKey) {
+      throw new Error("Invalid sync key");
+    }
+
+    await ctx.db.patch(args.workspaceId, {
+      kernelSandboxId: args.sandboxId ?? undefined,
+    });
+  },
+});
+
+/**
  * Get all cells for a workspace (used by sync server on load).
  * Validates via INTERNAL_API_KEY — no user auth required.
  */
@@ -267,6 +312,7 @@ const outputTypeValidator = v.union(
   v.literal("image"),
   v.literal("dataframe"),
   v.literal("error"),
+  v.literal("result"),
 );
 
 /**

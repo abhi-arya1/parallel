@@ -236,3 +236,32 @@ export function getCellIds(ydoc: Y.Doc): string[] {
 export function cellExists(ydoc: Y.Doc, cellId: string): boolean {
   return getCellData(ydoc).has(cellId);
 }
+
+/**
+ * Export the notebook to markdown format
+ */
+export function exportToMarkdown(ydoc: Y.Doc): string {
+  const cellOrder = getCellOrder(ydoc);
+  const cellData = getCellData(ydoc);
+  const cellIds = cellOrder.toArray();
+
+  const parts: string[] = [];
+
+  for (const cellId of cellIds) {
+    const cell = cellData.get(cellId);
+    if (!cell) continue;
+
+    const type = cell.get("type") as CellType;
+    const content = cell.get("content") as Y.Text | undefined;
+    const text = content?.toString() ?? "";
+
+    if (type === "markdown") {
+      parts.push(text);
+    } else if (type === "code") {
+      const language = (cell.get("language") as string) ?? "python";
+      parts.push(`\`\`\`${language}\n${text}\n\`\`\``);
+    }
+  }
+
+  return parts.join("\n\n");
+}

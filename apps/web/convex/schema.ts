@@ -7,7 +7,7 @@ export default defineSchema({
 
   workspaces: defineTable({
     title: v.string(),
-    hypothesis: v.string(),
+    hypothesis: v.optional(v.string()),
     createdBy: v.id("users"),
     collaborators: v.array(v.id("users")),
     lastSavedAt: v.optional(v.number()),
@@ -27,6 +27,8 @@ export default defineSchema({
         v.literal("B200"),
       ),
     ),
+    // Modal Sandbox ID for the persistent kernel
+    kernelSandboxId: v.optional(v.string()),
   }),
 
   cells: defineTable({
@@ -41,7 +43,6 @@ export default defineSchema({
     agentRole: v.optional(
       v.union(
         v.literal("engineer"),
-        v.literal("intern"),
         v.literal("researcher"),
         v.literal("reviewer"),
       ),
@@ -56,6 +57,8 @@ export default defineSchema({
     language: v.optional(v.string()),
     // Order in the document (synced from Y.js cellOrder array)
     orderIndex: v.optional(v.number()),
+    // Last execution time in milliseconds
+    lastRunTimeMs: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -73,6 +76,7 @@ export default defineSchema({
       v.literal("image"),
       v.literal("dataframe"),
       v.literal("error"),
+      v.literal("result"), // Last expression value (like Jupyter Out[n])
     ),
     content: v.string(), // Text, base64 image, or JSON
     createdAt: v.number(),
@@ -87,7 +91,6 @@ export default defineSchema({
     agentRole: v.optional(
       v.union(
         v.literal("engineer"),
-        v.literal("intern"),
         v.literal("researcher"),
         v.literal("reviewer"),
       ),
@@ -113,7 +116,6 @@ export default defineSchema({
     workspaceId: v.id("workspaces"),
     role: v.union(
       v.literal("engineer"),
-      v.literal("intern"),
       v.literal("researcher"),
       v.literal("reviewer"),
     ),
@@ -121,22 +123,47 @@ export default defineSchema({
       v.literal("spawning"),
       v.literal("thinking"),
       v.literal("working"),
-      v.literal("working_hard"),
+      v.literal("awaiting_approval"),
       v.literal("done"),
       v.literal("idle"),
+      v.literal("error"),
     ),
     currentTask: v.optional(v.string()),
     modalJobId: v.optional(v.string()),
     findings: v.array(v.id("cells")),
-  }).index("by_workspace", ["workspaceId"]),
+    error: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    pendingAction: v.optional(
+      v.union(v.literal("execute_code"), v.literal("publish_finding")),
+    ),
+    pendingCode: v.optional(v.string()),
+    autoApprove: v.optional(v.boolean()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_role", ["workspaceId", "role"]),
 
   activity_stream: defineTable({
     workspaceId: v.id("workspaces"),
     agentId: v.optional(v.id("agents")),
     agentRole: v.optional(v.string()),
-    message: v.string(),
+    contentType: v.string(),
+    content: v.any(),
     timestamp: v.number(),
-  }).index("by_workspace_timestamp", ["workspaceId", "timestamp"]),
+    streamId: v.optional(v.string()),
+    isPartial: v.optional(v.boolean()),
+  })
+    .index("by_workspace_timestamp", ["workspaceId", "timestamp"])
+    .index("by_agent", ["agentId", "timestamp"])
+    .index("by_stream", ["streamId"]),
+
+  agent_messages: defineTable({
+    workspaceId: v.id("workspaces"),
+    agentId: v.id("agents"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    timestamp: v.number(),
+  }).index("by_agent", ["agentId", "timestamp"]),
 
   threads: defineTable({
     cellId: v.id("cells"),

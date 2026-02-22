@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ShareDialog } from "./share-dialog";
 import { Button } from "@/components/ui/button";
+import { stopKernel } from "@/lib/sandbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,30 +25,43 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { AgentStatusSection } from "@/components/agent";
+import type { Id } from "@/convex/_generated/dataModel";
 
 interface ProjectSidebarProps {
   preloadedWorkspace: Preloaded<typeof api.workspaces.get>;
   preloadedCollaborators: Preloaded<typeof api.workspaces.getCollaborators>;
+  selectedAgentId: Id<"agents"> | null;
+  onSelectAgent: (agentId: Id<"agents"> | null) => void;
   children?: React.ReactNode;
 }
 
 export function ProjectSidebar({
   preloadedWorkspace,
   preloadedCollaborators,
+  selectedAgentId,
+  onSelectAgent,
   children,
 }: ProjectSidebarProps) {
+  const workspace = usePreloadedQuery(preloadedWorkspace);
+
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <ProjectSidebarHeader
         preloadedWorkspace={preloadedWorkspace}
         preloadedCollaborators={preloadedCollaborators}
       />
 
-      {/* Middle - extensible content area */}
+      {workspace && (
+        <AgentStatusSection
+          workspaceId={workspace._id}
+          selectedAgentId={selectedAgentId}
+          onSelectAgent={onSelectAgent}
+        />
+      )}
+
       <ProjectSidebarContent>{children}</ProjectSidebarContent>
 
-      {/* Footer */}
       <ProjectSidebarFooter />
     </div>
   );
@@ -209,6 +223,17 @@ function GpuSelector({
   const setGpu = useMutation(api.workspaces.setGpu);
   const selectedGpu = currentGpu ?? "T4";
 
+  const handleGpuChange = async (value: string) => {
+    // Update the GPU in Convex (this also clears the kernel reference)
+    await setGpu({ workspaceId: workspaceId as any, gpu: value as any });
+
+    // Terminate the old kernel on the sandbox server
+    // Fire-and-forget since the Convex mutation already cleared the reference
+    stopKernel(workspaceId).catch((e) => {
+      console.warn("Failed to stop old kernel:", e);
+    });
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -226,14 +251,12 @@ function GpuSelector({
       <DropdownMenuContent align="start">
         <DropdownMenuLabel className="flex items-center gap-2">
           <img src="/nvidia.svg" alt="NVIDIA" className="size-4" />
-          Select GPU
+          GPU
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup
           value={selectedGpu}
-          onValueChange={(value) =>
-            setGpu({ workspaceId: workspaceId as any, gpu: value as any })
-          }
+          onValueChange={handleGpuChange}
         >
           {GPU_OPTIONS.map((gpu) => (
             <DropdownMenuRadioItem key={gpu} value={gpu}>

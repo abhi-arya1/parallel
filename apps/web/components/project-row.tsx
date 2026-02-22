@@ -47,7 +47,6 @@ export function ProjectRow({
   workspace: {
     _id: Id<"workspaces">;
     title: string;
-    hypothesis?: string;
     _creationTime: number;
     owner?: CollaboratorUser | null;
     collaboratorUsers?: CollaboratorUser[];
@@ -71,11 +70,6 @@ export function ProjectRow({
           editing={editing}
           onEditingChange={onEditingChange}
         />
-        {workspace.hypothesis && (
-          <p className="text-muted-foreground text-sm truncate">
-            {workspace.hypothesis}
-          </p>
-        )}
       </div>
       <div className="flex items-center gap-3 shrink-0">
         {/* Avatar stack - show if there are collaborators */}

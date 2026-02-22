@@ -36,7 +36,9 @@ export class Document extends YServer {
   private getDebouncedSync() {
     if (!this._debouncedSync) {
       this._debouncedSync = debounce(
-        () => { this.syncToConvex(); },
+        () => {
+          this.syncToConvex();
+        },
         1000,
         { maxWait: 10000 },
       );
@@ -49,7 +51,9 @@ export class Document extends YServer {
     if (this._convexClient) return this._convexClient;
     const url = this.env.CONVEX_URL;
     if (!url) {
-      console.warn("[Document] CONVEX_URL not configured, skipping Convex sync");
+      console.warn(
+        "[Document] CONVEX_URL not configured, skipping Convex sync",
+      );
       return null;
     }
     this._convexClient = new ConvexHttpClient(url);
@@ -122,13 +126,18 @@ export class Document extends YServer {
 
     const workspaceId = this.getWorkspaceId();
     if (!workspaceId) {
-      console.warn("[Document] Could not parse workspaceId from room name:", this.name);
+      console.warn(
+        "[Document] Could not parse workspaceId from room name:",
+        this.name,
+      );
       return;
     }
 
     const syncKey = this.env.INTERNAL_API_KEY;
     if (!syncKey) {
-      console.warn("[Document] INTERNAL_API_KEY not configured, skipping Convex load");
+      console.warn(
+        "[Document] INTERNAL_API_KEY not configured, skipping Convex load",
+      );
       return;
     }
 
@@ -145,13 +154,21 @@ export class Document extends YServer {
         if (res.ok) {
           const buffer = await res.arrayBuffer();
           Y.applyUpdate(this.document, new Uint8Array(buffer));
-          console.log(`[Document] Restored Y.js snapshot (${buffer.byteLength} bytes) for workspace: ${workspaceId}`);
+          console.log(
+            `[Document] Restored Y.js snapshot (${buffer.byteLength} bytes) for workspace: ${workspaceId}`,
+          );
           return;
         }
-        console.warn("[Document] Snapshot fetch failed, falling back to cell-by-cell:", res.status);
+        console.warn(
+          "[Document] Snapshot fetch failed, falling back to cell-by-cell:",
+          res.status,
+        );
       }
     } catch (error) {
-      console.warn("[Document] Snapshot load failed, falling back to cell-by-cell:", error);
+      console.warn(
+        "[Document] Snapshot load failed, falling back to cell-by-cell:",
+        error,
+      );
     }
 
     // Fallback: reconstruct from individual cell records
@@ -162,11 +179,16 @@ export class Document extends YServer {
       });
 
       if (!cells || cells.length === 0) {
-        console.log("[Document] No cells in Convex for workspace:", workspaceId);
+        console.log(
+          "[Document] No cells in Convex for workspace:",
+          workspaceId,
+        );
         return;
       }
 
-      console.log(`[Document] Reconstructing ${cells.length} cells from Convex for workspace: ${workspaceId}`);
+      console.log(
+        `[Document] Reconstructing ${cells.length} cells from Convex for workspace: ${workspaceId}`,
+      );
 
       const cellOrder = this.document.getArray<string>("cellOrder");
       const cellData = this.document.getMap<Y.Map<unknown>>("cellData");
@@ -199,7 +221,9 @@ export class Document extends YServer {
         }
       });
 
-      console.log(`[Document] Successfully reconstructed ${cells.length} cells from Convex`);
+      console.log(
+        `[Document] Successfully reconstructed ${cells.length} cells from Convex`,
+      );
     } catch (error) {
       console.error("[Document] Failed to load from Convex:", error);
     }
@@ -215,13 +239,18 @@ export class Document extends YServer {
 
     const workspaceId = this.getWorkspaceId();
     if (!workspaceId) {
-      console.warn("[Document] Could not parse workspaceId from room name:", this.name);
+      console.warn(
+        "[Document] Could not parse workspaceId from room name:",
+        this.name,
+      );
       return;
     }
 
     const syncKey = this.env.INTERNAL_API_KEY;
     if (!syncKey) {
-      console.warn("[Document] INTERNAL_API_KEY not configured, skipping Convex sync");
+      console.warn(
+        "[Document] INTERNAL_API_KEY not configured, skipping Convex sync",
+      );
       return;
     }
 
@@ -230,26 +259,31 @@ export class Document extends YServer {
       const cellDataMap = this.document.getMap<Y.Map<unknown>>("cellData");
       const orderedIds = cellOrder.toArray();
 
-      const cells = orderedIds.map((cellId, index) => {
-        const cell = cellDataMap.get(cellId);
-        if (!cell) return null;
+      const cells = orderedIds
+        .map((cellId, index) => {
+          const cell = cellDataMap.get(cellId);
+          if (!cell) return null;
 
-        const content = cell.get("content");
-        const contentStr = content instanceof Y.Text ? content.toString() : String(content ?? "");
+          const content = cell.get("content");
+          const contentStr =
+            content instanceof Y.Text
+              ? content.toString()
+              : String(content ?? "");
 
-        return {
-          yjsCellId: (cell.get("id") as string) || cellId,
-          type: (cell.get("type") as string) || "note",
-          content: contentStr,
-          authorType: (cell.get("authorType") as string) || "human",
-          authorId: (cell.get("authorId") as string) || "unknown",
-          agentRole: cell.get("agentRole") as string | undefined,
-          status: (cell.get("status") as string) || "active",
-          language: cell.get("language") as string | undefined,
-          orderIndex: index,
-          createdAt: (cell.get("createdAt") as number) || Date.now(),
-        };
-      }).filter((c): c is NonNullable<typeof c> => c !== null);
+          return {
+            yjsCellId: (cell.get("id") as string) || cellId,
+            type: (cell.get("type") as string) || "note",
+            content: contentStr,
+            authorType: (cell.get("authorType") as string) || "human",
+            authorId: (cell.get("authorId") as string) || "unknown",
+            agentRole: cell.get("agentRole") as string | undefined,
+            status: (cell.get("status") as string) || "active",
+            language: cell.get("language") as string | undefined,
+            orderIndex: index,
+            createdAt: (cell.get("createdAt") as number) || Date.now(),
+          };
+        })
+        .filter((c): c is NonNullable<typeof c> => c !== null);
 
       if (cells.length === 0) {
         console.log("[Document] No cells to sync for room:", this.name);
@@ -262,7 +296,9 @@ export class Document extends YServer {
         cells,
       });
 
-      console.log(`[Document] Synced ${cells.length} cells to Convex for room: ${this.name}`);
+      console.log(
+        `[Document] Synced ${cells.length} cells to Convex for room: ${this.name}`,
+      );
 
       // Upload the full Y.js state snapshot to Convex file storage
       await this.uploadSnapshot(client, syncKey, workspaceId);
@@ -275,14 +311,23 @@ export class Document extends YServer {
    * Upload the full Y.js document state as a binary snapshot to Convex file storage.
    * This enables fast, lossless document restoration (preserves CRDT history, undo stacks, etc.).
    */
-  private async uploadSnapshot(client: ConvexHttpClient, syncKey: string, workspaceId: string) {
+  private async uploadSnapshot(
+    client: ConvexHttpClient,
+    syncKey: string,
+    workspaceId: string,
+  ) {
     try {
       // 1. Get an upload URL
-      const uploadUrl = await client.mutation(anyApi.sync.generateSnapshotUploadUrl, { syncKey });
+      const uploadUrl = await client.mutation(
+        anyApi.sync.generateSnapshotUploadUrl,
+        { syncKey },
+      );
 
       // 2. Encode and upload the Y.js state
       const stateUpdate = Y.encodeStateAsUpdate(this.document);
-      const blob = new Blob([stateUpdate], { type: "application/octet-stream" });
+      const blob = new Blob([stateUpdate], {
+        type: "application/octet-stream",
+      });
 
       const uploadRes = await fetch(uploadUrl, {
         method: "POST",
@@ -295,7 +340,7 @@ export class Document extends YServer {
         return;
       }
 
-      const { storageId } = await uploadRes.json() as { storageId: string };
+      const { storageId } = (await uploadRes.json()) as { storageId: string };
 
       // 3. Save the storageId to the workspace (deletes the old snapshot)
       await client.mutation(anyApi.sync.saveSnapshot, {
@@ -304,7 +349,9 @@ export class Document extends YServer {
         storageId,
       });
 
-      console.log(`[Document] Uploaded Y.js snapshot (${stateUpdate.byteLength} bytes) for room: ${this.name}`);
+      console.log(
+        `[Document] Uploaded Y.js snapshot (${stateUpdate.byteLength} bytes) for room: ${this.name}`,
+      );
     } catch (error) {
       // Non-fatal — cell data is already synced
       console.error("[Document] Failed to upload snapshot:", error);
@@ -335,11 +382,56 @@ export class Document extends YServer {
   }
 
   /**
+   * Convert the notebook to markdown format for agent context
+   */
+  private toMarkdown(): string {
+    const cellOrder = this.document.getArray<string>("cellOrder");
+    const cellDataMap = this.document.getMap<Y.Map<unknown>>("cellData");
+    const orderedIds = cellOrder.toArray();
+
+    const sections: string[] = [];
+
+    for (const cellId of orderedIds) {
+      const cell = cellDataMap.get(cellId);
+      if (!cell) continue;
+
+      const type = cell.get("type") as string;
+      const content = cell.get("content");
+      const contentStr =
+        content instanceof Y.Text ? content.toString() : String(content ?? "");
+      const authorType = cell.get("authorType") as string;
+      const agentRole = cell.get("agentRole") as string | undefined;
+
+      if (!contentStr.trim()) continue;
+
+      if (type === "code") {
+        const language = (cell.get("language") as string) || "python";
+        const authorLabel =
+          authorType === "agent" && agentRole ? `[${agentRole}]` : "";
+        sections.push(
+          `\`\`\`${language} ${authorLabel}\n${contentStr}\n\`\`\``,
+        );
+      } else {
+        if (authorType === "agent" && agentRole) {
+          sections.push(`> **${agentRole}**: ${contentStr}`);
+        } else {
+          sections.push(contentStr);
+        }
+      }
+    }
+
+    return sections.join("\n\n");
+  }
+
+  /**
    * Handle HTTP requests to the Durable Object
    * POST: trigger a sync to Convex
    * GET: health check / sync status
+   * GET /markdown: export notebook as markdown
    */
   async onRequest(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+
     if (request.method === "POST") {
       try {
         await this.syncToConvex();
@@ -348,7 +440,8 @@ export class Document extends YServer {
           headers: { "Content-Type": "application/json" },
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error";
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
         return new Response(JSON.stringify({ ok: false, error: message }), {
           status: 500,
           headers: { "Content-Type": "application/json" },
@@ -357,6 +450,14 @@ export class Document extends YServer {
     }
 
     if (request.method === "GET") {
+      if (url.pathname.endsWith("/markdown")) {
+        const markdown = this.toMarkdown();
+        return new Response(JSON.stringify({ ok: true, markdown }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
       const cellOrder = this.document.getArray<string>("cellOrder");
       return new Response(
         JSON.stringify({

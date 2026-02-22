@@ -5,7 +5,6 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 // Agent role validator
 const agentRoleValidator = v.union(
   v.literal("engineer"),
-  v.literal("intern"),
   v.literal("researcher"),
   v.literal("reviewer"),
 );

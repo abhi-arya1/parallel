@@ -4,7 +4,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 export type CellType = "markdown" | "code";
 
 // Agent roles (matches existing Convex schema)
-export type AgentRole = "engineer" | "intern" | "researcher" | "reviewer";
+export type AgentRole = "engineer" | "researcher" | "reviewer";
 
 // Author type
 export type AuthorType = "human" | "agent";
@@ -27,7 +27,6 @@ export interface CellMetadata {
 // Agent role → visual color mapping
 export const AGENT_COLORS: Record<AgentRole, string> = {
   engineer: "#4ECDC4", // teal
-  intern: "#FFE66D", // yellow
   researcher: "#A8DADC", // light blue
   reviewer: "#FF6B6B", // coral
 };
@@ -35,7 +34,6 @@ export const AGENT_COLORS: Record<AgentRole, string> = {
 // Agent role display names
 export const AGENT_ROLE_LABELS: Record<AgentRole, string> = {
   engineer: "Engineer",
-  intern: "Intern",
   researcher: "Researcher",
   reviewer: "Reviewer",
 };
@@ -46,7 +44,6 @@ export const AGENT_ROLE_INFO: Record<
   { label: string; color: string }
 > = {
   engineer: { label: "Engineer", color: "#4ECDC4" },
-  intern: { label: "Intern", color: "#FFE66D" },
   researcher: { label: "Researcher", color: "#A8DADC" },
   reviewer: { label: "Reviewer", color: "#FF6B6B" },
 };

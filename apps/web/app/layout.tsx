@@ -3,6 +3,7 @@ import { Inter, Source_Serif_4 } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { ConvexClientProvider } from "./providers/convex-client-provider";
+import { Toaster } from "sonner";
 import "./globals.css";
 import "streamdown/styles.css";
 
@@ -35,6 +36,7 @@ export default function RootLayout({
           <ConvexClientProvider>
             <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
               {children}
+              <Toaster richColors position="bottom-right" />
             </ThemeProvider>
           </ConvexClientProvider>
         </body>

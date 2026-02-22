@@ -47,7 +47,6 @@ export function ProjectCard({
   workspace: {
     _id: Id<"workspaces">;
     title: string;
-    hypothesis?: string;
     _creationTime: number;
     owner?: CollaboratorUser | null;
     collaboratorUsers?: CollaboratorUser[];
@@ -71,11 +70,6 @@ export function ProjectCard({
           editing={editing}
           onEditingChange={onEditingChange}
         />
-        {workspace.hypothesis && (
-          <p className="text-muted-foreground text-sm truncate mt-0.5">
-            {workspace.hypothesis}
-          </p>
-        )}
         <p className="text-muted-foreground text-xs mt-2">
           Created{" "}
           {formatDistanceToNow(workspace._creationTime, {

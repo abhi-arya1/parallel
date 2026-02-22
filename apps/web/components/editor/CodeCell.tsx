@@ -68,6 +68,7 @@ export function CodeCell({
 }: CodeCellProps) {
   const editorRef = useRef<monacoEditor.IStandaloneCodeEditor | null>(null);
   const bindingRef = useRef<MonacoBinding | null>(null);
+  const [isEditorMounted, setIsEditorMounted] = useState(false);
   const { resolvedTheme } = useTheme();
 
   const language = "python";
@@ -214,6 +215,7 @@ export function CodeCell({
   const handleEditorMount: OnMount = useCallback(
     (editor, monaco) => {
       editorRef.current = editor;
+      setIsEditorMounted(true);
 
       // Set up content height listener for auto-sizing
       editor.onDidContentSizeChange(() => {
@@ -251,12 +253,13 @@ export function CodeCell({
         editorRef.current.dispose();
         editorRef.current = null;
       }
+      setIsEditorMounted(false);
     };
   }, []);
 
   // Create y-monaco binding when ytext, provider, and editor are all available
   useEffect(() => {
-    if (!ytext || !editorRef.current || !provider) return;
+    if (!ytext || !isEditorMounted || !editorRef.current || !provider) return;
 
     // Skip if binding already exists for this ytext
     if (bindingRef.current) return;
@@ -268,15 +271,16 @@ export function CodeCell({
     import("y-monaco").then(({ MonacoBinding }) => {
       // Double-check we still need to create it (async race condition)
       if (bindingRef.current) return;
+      if (!editorRef.current) return;
 
       bindingRef.current = new MonacoBinding(
         ytext,
         model,
-        new Set([editorRef.current!]),
+        new Set([editorRef.current]),
         provider.awareness,
       );
     });
-  }, [ytext, provider]);
+  }, [ytext, provider, isEditorMounted]);
 
   // Clear local outputs when Convex outputs update (they're now persisted)
   useEffect(() => {

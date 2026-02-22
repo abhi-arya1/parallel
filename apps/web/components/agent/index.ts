@@ -5,4 +5,4 @@ export * from "./AgentStatusSection";
 export * from "./AgentDetailPanel";
 export * from "./AgentActivityStream";
 export * from "./AgentChat";
-export * from "./ThinkButton";
+export * from "./ResearchButton";

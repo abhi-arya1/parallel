@@ -3,14 +3,15 @@
 import { useRef, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { AgentDetailPanel } from "@/components/agent/AgentDetailPanel";
+import { RunsPanel } from "@/components/editor/RunsPanel";
 import type { Id } from "@/convex/_generated/dataModel";
 
 const MIN_SIDEBAR_WIDTH = 15;
 const MAX_SIDEBAR_WIDTH = 40;
 const DEFAULT_SIDEBAR_WIDTH = 18;
-const MIN_AGENT_PANEL_WIDTH = 280;
-const MAX_AGENT_PANEL_WIDTH = 480;
-const DEFAULT_AGENT_PANEL_WIDTH = 360;
+const MIN_SECONDARY_PANEL_WIDTH = 280;
+const MAX_SECONDARY_PANEL_WIDTH = 480;
+const DEFAULT_SECONDARY_PANEL_WIDTH = 360;
 
 interface ResizableLayoutProps {
   sidebar: React.ReactNode;
@@ -18,6 +19,9 @@ interface ResizableLayoutProps {
   className?: string;
   selectedAgentId?: Id<"agents"> | null;
   onCloseAgentPanel?: () => void;
+  showRunsPanel?: boolean;
+  onCloseRunsPanel?: () => void;
+  workspaceId?: Id<"workspaces">;
 }
 
 export function ResizableLayout({
@@ -26,14 +30,20 @@ export function ResizableLayout({
   className,
   selectedAgentId,
   onCloseAgentPanel,
+  showRunsPanel,
+  onCloseRunsPanel,
+  workspaceId,
 }: ResizableLayoutProps) {
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
-  const [agentPanelWidth, setAgentPanelWidth] = useState(
-    DEFAULT_AGENT_PANEL_WIDTH,
+  const [secondaryPanelWidth, setSecondaryPanelWidth] = useState(
+    DEFAULT_SECONDARY_PANEL_WIDTH,
   );
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingSidebar = useRef(false);
-  const isDraggingAgentPanel = useRef(false);
+  const isDraggingSecondaryPanel = useRef(false);
+
+  // Determine which panel to show (only one at a time)
+  const showSecondaryPanel = selectedAgentId || (showRunsPanel && workspaceId);
 
   const handleSidebarMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -61,29 +71,29 @@ export function ResizableLayout({
     window.addEventListener("mouseup", onMouseUp);
   }, []);
 
-  const handleAgentPanelMouseDown = useCallback(
+  const handleSecondaryPanelMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      isDraggingAgentPanel.current = true;
+      isDraggingSecondaryPanel.current = true;
       document.body.style.userSelect = "none";
 
       const startX = e.clientX;
-      const startWidth = agentPanelWidth;
+      const startWidth = secondaryPanelWidth;
 
       const onMouseMove = (e: MouseEvent) => {
-        if (!isDraggingAgentPanel.current) return;
+        if (!isDraggingSecondaryPanel.current) return;
         const delta = e.clientX - startX;
         const newWidth = startWidth + delta;
-        setAgentPanelWidth(
+        setSecondaryPanelWidth(
           Math.min(
-            MAX_AGENT_PANEL_WIDTH,
-            Math.max(MIN_AGENT_PANEL_WIDTH, newWidth),
+            MAX_SECONDARY_PANEL_WIDTH,
+            Math.max(MIN_SECONDARY_PANEL_WIDTH, newWidth),
           ),
         );
       };
 
       const onMouseUp = () => {
-        isDraggingAgentPanel.current = false;
+        isDraggingSecondaryPanel.current = false;
         document.body.style.userSelect = "";
         window.removeEventListener("mousemove", onMouseMove);
         window.removeEventListener("mouseup", onMouseUp);
@@ -92,7 +102,7 @@ export function ResizableLayout({
       window.addEventListener("mousemove", onMouseMove);
       window.addEventListener("mouseup", onMouseUp);
     },
-    [agentPanelWidth],
+    [secondaryPanelWidth],
   );
 
   return (
@@ -108,22 +118,54 @@ export function ResizableLayout({
         className="w-1 flex-shrink-0 cursor-col-resize hover:bg-accent transition-colors"
       />
 
-      {selectedAgentId && (
-        <>
-          <aside
-            style={{ width: agentPanelWidth }}
-            className="flex-shrink-0 flex flex-col overflow-hidden bg-background border-r border-border"
-          >
-            <AgentDetailPanel
-              agentId={selectedAgentId}
-              onClose={onCloseAgentPanel}
-            />
-          </aside>
-          <div
-            onMouseDown={handleAgentPanelMouseDown}
-            className="w-1 flex-shrink-0 cursor-col-resize hover:bg-accent transition-colors"
+      {/* Secondary panel with slide animation */}
+      <aside
+        style={{ width: showSecondaryPanel ? secondaryPanelWidth : 0 }}
+        className={cn(
+          "flex-shrink-0 flex flex-col overflow-hidden bg-background border-r border-border transition-[width] duration-200 ease-out",
+          !showSecondaryPanel && "border-r-0",
+        )}
+      >
+        {selectedAgentId && (
+          <AgentDetailPanel
+            agentId={selectedAgentId}
+            onClose={onCloseAgentPanel}
           />
-        </>
+        )}
+        {showRunsPanel && workspaceId && !selectedAgentId && (
+          <>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <h3 className="text-sm font-semibold">Runs</h3>
+              <button
+                onClick={onCloseRunsPanel}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <RunsPanel workspaceId={workspaceId} />
+            </div>
+          </>
+        )}
+      </aside>
+      {showSecondaryPanel && (
+        <div
+          onMouseDown={handleSecondaryPanelMouseDown}
+          className="w-1 flex-shrink-0 cursor-col-resize hover:bg-accent transition-colors"
+        />
       )}
 
       <main className="flex-1 overflow-hidden min-w-0 bg-background">

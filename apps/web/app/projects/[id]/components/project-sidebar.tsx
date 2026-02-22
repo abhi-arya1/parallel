@@ -11,6 +11,7 @@ import {
   Door01Icon,
   AddTeamIcon,
   CpuIcon,
+  ChartLineData03Icon,
 } from "@hugeicons-pro/core-duotone-rounded";
 import { cn } from "@/lib/utils";
 import { ShareDialog } from "./share-dialog";
@@ -33,6 +34,8 @@ interface ProjectSidebarProps {
   preloadedCollaborators: Preloaded<typeof api.workspaces.getCollaborators>;
   selectedAgentId: Id<"agents"> | null;
   onSelectAgent: (agentId: Id<"agents"> | null) => void;
+  showRunsPanel?: boolean;
+  onToggleRunsPanel?: () => void;
   children?: React.ReactNode;
 }
 
@@ -41,6 +44,8 @@ export function ProjectSidebar({
   preloadedCollaborators,
   selectedAgentId,
   onSelectAgent,
+  showRunsPanel,
+  onToggleRunsPanel,
   children,
 }: ProjectSidebarProps) {
   const workspace = usePreloadedQuery(preloadedWorkspace);
@@ -58,6 +63,10 @@ export function ProjectSidebar({
           selectedAgentId={selectedAgentId}
           onSelectAgent={onSelectAgent}
         />
+      )}
+
+      {workspace && (
+        <RunsToggle isActive={showRunsPanel} onToggle={onToggleRunsPanel} />
       )}
 
       <ProjectSidebarContent>{children}</ProjectSidebarContent>
@@ -281,6 +290,31 @@ export function ProjectSidebarContent({
   return (
     <div className={cn("flex-1 overflow-y-auto px-4 py-3", className)}>
       {children}
+    </div>
+  );
+}
+
+function RunsToggle({
+  isActive,
+  onToggle,
+}: {
+  isActive?: boolean;
+  onToggle?: () => void;
+}) {
+  return (
+    <div className="border-t border-border">
+      <button
+        onClick={onToggle}
+        className={cn(
+          "flex w-full items-center gap-2 px-4 py-2 text-sm transition-colors",
+          isActive
+            ? "text-foreground bg-muted/50"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <HugeiconsIcon icon={ChartLineData03Icon} size={18} />
+        <span>Runs</span>
+      </button>
     </div>
   );
 }

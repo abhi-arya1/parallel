@@ -16,6 +16,10 @@
         "name": "ParallelAgent",
         "class_name": "ParallelAgent",
       },
+      {
+        "name": "PersonaAgent",
+        "class_name": "PersonaAgent",
+      },
     ],
   },
 
@@ -24,18 +28,9 @@
       "tag": "v1",
       "new_sqlite_classes": ["ParallelAgent"],
     },
-  ],
-
-  "workflows": [
     {
-      "name": "ParallelWorkflow",
-      "class_name": "ParallelWorkflow",
-      "binding": "PARALLEL_WORKFLOW",
-    },
-    {
-      "name": "HypothesisWorkflow",
-      "class_name": "HypothesisWorkflow",
-      "binding": "HYPOTHESIS_WORKFLOW",
+      "tag": "v2",
+      "new_sqlite_classes": ["PersonaAgent"],
     },
   ],
 

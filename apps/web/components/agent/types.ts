@@ -6,11 +6,46 @@ export type AgentStatus =
   | "spawning"
   | "thinking"
   | "working"
-  | "working_hard"
   | "awaiting_approval"
   | "done"
   | "idle"
   | "error";
+
+export interface Activity {
+  id: string;
+  type: string;
+  content: unknown;
+  streamId?: string;
+  isPartial?: boolean;
+  createdAt: number;
+}
+
+export interface Finding {
+  id: string;
+  content: string;
+  cellType: string;
+  createdAt: number;
+  syncedToNotebook: boolean;
+}
+
+export interface Message {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+}
+
+export interface AgentState {
+  role: AgentRole;
+  status: AgentStatus;
+  autoApprove: boolean;
+  activity: Activity[];
+  findings: Finding[];
+  messages: Message[];
+  streamingText?: string;
+  streamId?: string;
+  pendingCode?: string;
+  connected: boolean;
+}
 
 export interface Agent {
   _id: Id<"agents">;
@@ -71,7 +106,7 @@ export const AGENT_ROLE_CONFIG: Record<
 
 export const AGENT_STATUS_CONFIG: Record<
   AgentStatus,
-  { label: string; color: string; bgColor: string }
+  { label: string; color: string; bgColor: string; showLabel?: boolean }
 > = {
   spawning: {
     label: "Starting",
@@ -88,23 +123,19 @@ export const AGENT_STATUS_CONFIG: Record<
     color: "text-amber-500",
     bgColor: "bg-amber-500/10",
   },
-  working_hard: {
-    label: "Working Hard",
-    color: "text-amber-600",
-    bgColor: "bg-amber-600/10",
-  },
   awaiting_approval: {
-    label: "Needs Approval",
+    label: "Needs You",
     color: "text-orange-500",
     bgColor: "bg-orange-500/10",
+    showLabel: true,
   },
   done: {
-    label: "Done",
+    label: "",
     color: "text-emerald-500",
     bgColor: "bg-emerald-500/10",
   },
   idle: {
-    label: "Idle",
+    label: "",
     color: "text-muted-foreground",
     bgColor: "bg-muted",
   },
@@ -112,5 +143,6 @@ export const AGENT_STATUS_CONFIG: Record<
     label: "Error",
     color: "text-red-500",
     bgColor: "bg-red-500/10",
+    showLabel: true,
   },
 };

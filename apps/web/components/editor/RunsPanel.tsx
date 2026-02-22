@@ -209,28 +209,19 @@ export function RunsPanel({ workspaceId }: RunsPanelProps) {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Runs</h3>
-        {liveRuns.length > 0 && (
+      {/* Active count badge */}
+      {liveRuns.length > 0 && (
+        <div className="flex items-center justify-end">
           <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-xs text-green-600 dark:text-green-400">
             {liveRuns.length} active
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Empty state */}
       {runs.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-          <div className="mb-2 text-2xl">
-            <span role="img" aria-label="chart">
-              {"\u{1F4CA}"}
-            </span>
-          </div>
+        <div className="flex flex-col items-center justify-center py-6 text-center">
           <p className="text-sm text-muted-foreground">No runs yet</p>
-          <p className="text-xs text-muted-foreground">
-            Execute a code cell to start tracking
-          </p>
         </div>
       )}
 

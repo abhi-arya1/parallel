@@ -93,21 +93,41 @@ function CodeBlockWrapper(props: any) {
   );
 }
 
-interface MarkdownPreviewProps {
-  content: string;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function LinkWrapper(props: any) {
+  return (
+    <a
+      {...props}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-primary underline underline-offset-2 hover:text-primary/80"
+    />
+  );
 }
 
-export function MarkdownPreview({ content }: MarkdownPreviewProps) {
+interface MarkdownPreviewProps {
+  content: string;
+  compact?: boolean;
+}
+
+export function MarkdownPreview({ content, compact }: MarkdownPreviewProps) {
   if (!content.trim()) {
     return <p className="text-sm italic text-muted-foreground">Empty text</p>;
   }
 
   return (
-    <div className="markdown-preview prose prose-sm dark:prose-invert max-w-none px-1">
+    <div
+      className={
+        compact
+          ? "markdown-preview prose prose-xs dark:prose-invert max-w-none [&_p]:my-1 [&_pre]:my-1.5 [&_pre]:text-[11px] [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-xs [&_h4]:text-xs [&_code]:text-[11px]"
+          : "markdown-preview prose prose-sm dark:prose-invert max-w-none px-1"
+      }
+    >
       <Streamdown
         plugins={{ math }}
         components={{
           pre: CodeBlockWrapper,
+          a: LinkWrapper,
         }}
       >
         {content}

@@ -470,8 +470,50 @@ export class Document extends YServer {
   }
 
   /**
+   * Insert a cell into the Y.js document (called by agents)
+   */
+  private insertCell(cell: {
+    yjsCellId: string;
+    type: string;
+    content: string;
+    authorType: string;
+    authorId: string;
+    agentRole?: string;
+  }) {
+    const cellOrder = this.document.getArray<string>("cellOrder");
+    const cellData = this.document.getMap<Y.Map<unknown>>("cellData");
+
+    this.document.transact(() => {
+      const cellMap = new Y.Map();
+      cellMap.set("id", cell.yjsCellId);
+      cellMap.set("type", cell.type);
+      cellMap.set("authorType", cell.authorType);
+      cellMap.set("authorId", cell.authorId);
+      cellMap.set("status", "active");
+      cellMap.set("createdAt", Date.now());
+
+      if (cell.agentRole) {
+        cellMap.set("agentRole", cell.agentRole);
+      }
+
+      cellData.set(cell.yjsCellId, cellMap);
+      const integrated = cellData.get(cell.yjsCellId)!;
+      const ytext = new Y.Text();
+      ytext.insert(0, cell.content || "");
+      integrated.set("content", ytext);
+
+      cellOrder.push([cell.yjsCellId]);
+    });
+
+    console.log(
+      `[Document] Inserted cell ${cell.yjsCellId} into Y.js document`,
+    );
+  }
+
+  /**
    * Handle HTTP requests to the Durable Object
    * POST: trigger a sync to Convex
+   * POST /cell: insert a cell into Y.js (agent findings)
    * GET: health check / sync status
    * GET /markdown: export notebook as markdown
    */
@@ -479,6 +521,49 @@ export class Document extends YServer {
     const url = new URL(request.url);
 
     if (request.method === "POST") {
+      if (url.pathname.endsWith("/cell")) {
+        try {
+          const body = (await request.json()) as {
+            syncKey: string;
+            yjsCellId: string;
+            type: string;
+            content: string;
+            authorType: string;
+            authorId: string;
+            agentRole?: string;
+          };
+
+          const expectedKey = this.env.INTERNAL_API_KEY;
+          if (!expectedKey || body.syncKey !== expectedKey) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "Invalid sync key" }),
+              { status: 401, headers: { "Content-Type": "application/json" } },
+            );
+          }
+
+          this.insertCell({
+            yjsCellId: body.yjsCellId,
+            type: body.type,
+            content: body.content,
+            authorType: body.authorType,
+            authorId: body.authorId,
+            agentRole: body.agentRole,
+          });
+
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Unknown error";
+          return new Response(JSON.stringify({ ok: false, error: message }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+      }
+
       try {
         await this.syncToConvex();
         return new Response(JSON.stringify({ ok: true }), {

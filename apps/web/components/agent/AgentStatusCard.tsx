@@ -42,8 +42,22 @@ export function AgentStatusCard({
         />
         {isActive && (
           <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+            <span
+              className={cn(
+                "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+                agent.status === "awaiting_approval"
+                  ? "bg-orange-400"
+                  : "bg-blue-400",
+              )}
+            />
+            <span
+              className={cn(
+                "relative inline-flex rounded-full h-2 w-2",
+                agent.status === "awaiting_approval"
+                  ? "bg-orange-500"
+                  : "bg-blue-500",
+              )}
+            />
           </span>
         )}
       </div>
@@ -52,15 +66,17 @@ export function AgentStatusCard({
           <span className="text-sm font-medium truncate">
             {roleConfig.label}
           </span>
-          <span
-            className={cn(
-              "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
-              statusConfig.bgColor,
-              statusConfig.color,
-            )}
-          >
-            {statusConfig.label}
-          </span>
+          {statusConfig.label && (
+            <span
+              className={cn(
+                "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
+                statusConfig.bgColor,
+                statusConfig.color,
+              )}
+            >
+              {statusConfig.label}
+            </span>
+          )}
         </div>
         {agent.error ? (
           <p className="text-xs text-red-500 truncate mt-0.5">

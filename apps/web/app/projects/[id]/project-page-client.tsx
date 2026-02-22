@@ -26,7 +26,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Settings01Icon } from "@hugeicons-pro/core-duotone-rounded";
 import type { Id } from "@/convex/_generated/dataModel";
-import { ThinkButton } from "@/components/agent";
+import { ResearchButton } from "@/components/agent";
 
 interface ProjectPageClientProps {
   id: string;
@@ -47,6 +47,17 @@ export function ProjectPageClient({
   const [selectedAgentId, setSelectedAgentId] = useState<Id<"agents"> | null>(
     null,
   );
+  const [showRunsPanel, setShowRunsPanel] = useState(false);
+
+  const handleSelectAgent = (agentId: Id<"agents"> | null) => {
+    setSelectedAgentId(agentId);
+    if (agentId) setShowRunsPanel(false); // Close runs panel when selecting agent
+  };
+
+  const handleToggleRunsPanel = () => {
+    setShowRunsPanel(!showRunsPanel);
+    if (!showRunsPanel) setSelectedAgentId(null); // Close agent panel when opening runs
+  };
   const notebookRef = useRef<NotebookEditorRef>(null);
   const clearAllOutputs = useMutation(api.cells.clearAllOutputs);
 
@@ -99,7 +110,7 @@ export function ProjectPageClient({
   return (
     <div className="relative h-screen">
       <div className="absolute top-3 right-3 z-50 flex items-center gap-2">
-        {workspace && <ThinkButton workspaceId={workspace._id} />}
+        {workspace && <ResearchButton workspaceId={workspace._id} />}
 
         <button
           onClick={handleRunAll}
@@ -161,11 +172,16 @@ export function ProjectPageClient({
             preloadedWorkspace={preloadedWorkspace}
             preloadedCollaborators={preloadedCollaborators}
             selectedAgentId={selectedAgentId}
-            onSelectAgent={setSelectedAgentId}
+            onSelectAgent={handleSelectAgent}
+            showRunsPanel={showRunsPanel}
+            onToggleRunsPanel={handleToggleRunsPanel}
           />
         }
         selectedAgentId={selectedAgentId}
         onCloseAgentPanel={() => setSelectedAgentId(null)}
+        showRunsPanel={showRunsPanel}
+        onCloseRunsPanel={() => setShowRunsPanel(false)}
+        workspaceId={workspace?._id}
       >
         <NotebookEditor
           ref={notebookRef}

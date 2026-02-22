@@ -1,70 +1,51 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Idea01Icon, Cancel01Icon } from "@hugeicons-pro/core-duotone-rounded";
-import { triggerHypothesisWorkflow, type AgentRole } from "@/lib/agents";
+import {
+  Search01Icon,
+  Cancel01Icon,
+} from "@hugeicons-pro/core-duotone-rounded";
+import { useAgentConnections } from "@/lib/use-agent-connections";
 
-interface ThinkButtonProps {
+interface ResearchButtonProps {
   workspaceId: Id<"workspaces">;
   className?: string;
 }
 
-const ALL_ROLES: AgentRole[] = ["engineer", "researcher", "reviewer"];
-
-export function ThinkButton({ workspaceId, className }: ThinkButtonProps) {
-  const [isSpawning, setIsSpawning] = useState(false);
+export function ResearchButton({
+  workspaceId,
+  className,
+}: ResearchButtonProps) {
+  const [isStarting, setIsStarting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [hypothesis, setHypothesis] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const spawnAgents = useMutation(api.agents.spawnAgents);
-  const stopAllAgents = useMutation(api.agents.stopAllAgents);
-  const existingAgents = useQuery(api.agents.listByWorkspace, { workspaceId });
-
-  const hasActiveAgents = existingAgents?.some((a) =>
-    [
-      "spawning",
-      "thinking",
-      "working",
-      "working_hard",
-      "awaiting_approval",
-    ].includes(a.status),
-  );
+  const { hasActiveAgents, isConnected, startResearch, stopAll } =
+    useAgentConnections(workspaceId);
 
   const handleSubmit = async () => {
-    if (isSpawning || hasActiveAgents || !hypothesis.trim()) return;
+    if (isStarting || hasActiveAgents || !hypothesis.trim()) return;
 
-    setIsSpawning(true);
+    setIsStarting(true);
     try {
-      const result = await spawnAgents({
-        workspaceId,
-        roles: ALL_ROLES,
-      });
-
-      const agentIds = result as Record<AgentRole, string>;
-      await triggerHypothesisWorkflow(workspaceId, hypothesis, agentIds);
+      startResearch(hypothesis);
       setIsOpen(false);
       setHypothesis("");
     } catch (error) {
-      console.error("Failed to spawn agents:", error);
+      console.error("Failed to start research:", error);
     } finally {
-      setIsSpawning(false);
+      setIsStarting(false);
     }
   };
 
-  const handleStop = async () => {
-    try {
-      await stopAllAgents({ workspaceId });
-      setShowStopConfirm(false);
-    } catch (error) {
-      console.error("Failed to stop agents:", error);
-    }
+  const handleStop = () => {
+    stopAll();
+    setShowStopConfirm(false);
   };
 
   const handleButtonClick = () => {
@@ -92,7 +73,7 @@ export function ThinkButton({ workspaceId, className }: ThinkButtonProps) {
     <div className="relative">
       <button
         onClick={handleButtonClick}
-        disabled={isSpawning}
+        disabled={isStarting || !isConnected}
         className={cn(
           "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium transition-colors",
           hasActiveAgents
@@ -102,7 +83,7 @@ export function ThinkButton({ workspaceId, className }: ThinkButtonProps) {
           className,
         )}
       >
-        {isSpawning ? (
+        {isStarting ? (
           <>
             <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
             Starting...
@@ -110,12 +91,12 @@ export function ThinkButton({ workspaceId, className }: ThinkButtonProps) {
         ) : hasActiveAgents ? (
           <>
             <div className="h-3 w-3 animate-pulse rounded-full bg-white/80" />
-            Thinking...
+            Researching...
           </>
         ) : (
           <>
-            <HugeiconsIcon icon={Idea01Icon} size={14} />
-            Think
+            <HugeiconsIcon icon={Search01Icon} size={14} />
+            Research
           </>
         )}
       </button>
@@ -175,20 +156,23 @@ export function ThinkButton({ workspaceId, className }: ThinkButtonProps) {
             />
             <div className="flex items-center justify-between mt-2">
               <span className="text-[10px] text-muted-foreground">
-                {navigator.platform.includes("Mac") ? "⌘" : "Ctrl"}+Enter to
-                submit
+                {typeof navigator !== "undefined" &&
+                navigator.platform.includes("Mac")
+                  ? "⌘"
+                  : "Ctrl"}
+                +Enter to submit
               </span>
               <button
                 onClick={handleSubmit}
-                disabled={!hypothesis.trim() || isSpawning}
+                disabled={!hypothesis.trim() || isStarting}
                 className={cn(
                   "inline-flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium",
                   "bg-violet-600 text-white hover:bg-violet-700",
                   "disabled:opacity-50 disabled:pointer-events-none transition-colors",
                 )}
               >
-                <HugeiconsIcon icon={Idea01Icon} size={12} />
-                Analyze
+                <HugeiconsIcon icon={Search01Icon} size={12} />
+                Research
               </button>
             </div>
           </div>

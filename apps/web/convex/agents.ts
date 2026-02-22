@@ -11,7 +11,6 @@ const agentStatusValidator = v.union(
   v.literal("spawning"),
   v.literal("thinking"),
   v.literal("working"),
-  v.literal("working_hard"),
   v.literal("awaiting_approval"),
   v.literal("done"),
   v.literal("idle"),
@@ -118,6 +117,60 @@ export const spawnAgents = mutation({
     }
 
     return agentIds;
+  },
+});
+
+export const ensureAgent = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    role: agentRoleValidator,
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("agents")
+      .withIndex("by_workspace_role", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("role", args.role),
+      )
+      .first();
+
+    if (existing) {
+      return { agentId: existing._id, created: false };
+    }
+
+    const id = await ctx.db.insert("agents", {
+      workspaceId: args.workspaceId,
+      role: args.role,
+      status: "idle",
+      findings: [],
+      startedAt: Date.now(),
+    });
+    return { agentId: id, created: true };
+  },
+});
+
+export const startAgentFromChat = mutation({
+  args: {
+    agentId: v.id("agents"),
+  },
+  handler: async (ctx, args) => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) throw new Error("Agent not found");
+
+    if (!["idle", "done", "error"].includes(agent.status)) {
+      return { started: false, status: agent.status };
+    }
+
+    await ctx.db.patch(args.agentId, {
+      status: "thinking",
+      completedAt: undefined,
+      error: undefined,
+    });
+
+    return {
+      started: true,
+      workspaceId: agent.workspaceId,
+      role: agent.role,
+    };
   },
 });
 
@@ -539,5 +592,134 @@ export const continueAgent = mutation({
       workspaceId: agent.workspaceId,
       role: agent.role,
     };
+  },
+});
+
+export const clearAgentChat = mutation({
+  args: {
+    agentId: v.id("agents"),
+  },
+  handler: async (ctx, args) => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) throw new Error("Agent not found");
+
+    const activities = await ctx.db
+      .query("activity_stream")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    for (const activity of activities) {
+      await ctx.db.delete(activity._id);
+    }
+
+    const messages = await ctx.db
+      .query("agent_messages")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    for (const message of messages) {
+      await ctx.db.delete(message._id);
+    }
+
+    return { cleared: true };
+  },
+});
+
+export const createAgentFinding = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    role: agentRoleValidator,
+    content: v.string(),
+    cellType: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const agent = await ctx.db
+      .query("agents")
+      .withIndex("by_workspace_role", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("role", args.role),
+      )
+      .first();
+
+    const now = Date.now();
+    const yjsCellId = `agent-${args.role}-${now}`;
+
+    const cellId = await ctx.db.insert("cells", {
+      workspaceId: args.workspaceId,
+      yjsCellId,
+      type: (args.cellType ?? "markdown") as "markdown" | "code",
+      content: args.content,
+      authorType: "agent",
+      authorId: agent?._id ?? `persona-${args.role}`,
+      agentRole: args.role,
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    if (agent) {
+      await ctx.db.patch(agent._id, {
+        findings: [...agent.findings, cellId],
+      });
+    }
+
+    return { cellId, yjsCellId };
+  },
+});
+
+export const updateAgentStatus = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    role: agentRoleValidator,
+    status: agentStatusValidator,
+  },
+  handler: async (ctx, args) => {
+    const agent = await ctx.db
+      .query("agents")
+      .withIndex("by_workspace_role", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("role", args.role),
+      )
+      .first();
+
+    if (!agent) {
+      await ctx.db.insert("agents", {
+        workspaceId: args.workspaceId,
+        role: args.role,
+        status: args.status,
+        findings: [],
+        startedAt: Date.now(),
+      });
+      return;
+    }
+
+    const updates: Record<string, unknown> = { status: args.status };
+    if (args.status === "done" || args.status === "error") {
+      updates.completedAt = Date.now();
+    }
+
+    await ctx.db.patch(agent._id, updates);
+  },
+});
+
+export const postAgentActivity = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    role: agentRoleValidator,
+    contentType: v.string(),
+    content: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const agent = await ctx.db
+      .query("agents")
+      .withIndex("by_workspace_role", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("role", args.role),
+      )
+      .first();
+
+    await ctx.db.insert("activity_stream", {
+      workspaceId: args.workspaceId,
+      agentId: agent?._id,
+      agentRole: args.role,
+      contentType: args.contentType,
+      content: args.content,
+      timestamp: Date.now(),
+    });
   },
 });

@@ -18,8 +18,8 @@
         "class_name": "ParallelAgent",
       },
       {
-        "name": "PERSONA_AGENT",
-        "class_name": "PersonaAgent",
+        "name": "WORKSPACE_AGENT",
+        "class_name": "WorkspaceAgent",
       },
     ],
   },
@@ -32,6 +32,10 @@
     {
       "tag": "v2",
       "new_sqlite_classes": ["PersonaAgent"],
+    },
+    {
+      "tag": "v3",
+      "renamed_classes": [{ "from": "PersonaAgent", "to": "WorkspaceAgent" }],
     },
   ],
 

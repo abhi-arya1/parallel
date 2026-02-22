@@ -37,7 +37,6 @@ export interface Message {
 export interface AgentState {
   role: AgentRole;
   status: AgentStatus;
-  autoApprove: boolean;
   activity: Activity[];
   findings: Finding[];
   messages: Message[];
@@ -59,7 +58,6 @@ export interface Agent {
   completedAt?: number;
   pendingAction?: "execute_code" | "publish_finding";
   pendingCode?: string;
-  autoApprove?: boolean;
 }
 
 export interface ActivityItem {

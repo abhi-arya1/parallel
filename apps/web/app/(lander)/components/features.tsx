@@ -12,7 +12,7 @@ const features = [
   {
     title: "Cloud GPUs on demand",
     description:
-      "Access T4 to H100 GPUs instantly. Run expensive training jobs without managing infrastructure.",
+      "Access T4 up to B200 NVIDIA GPUs instantly. Run infra-heavy training jobs without managing infrastructure.",
   },
 ];
 
@@ -21,7 +21,7 @@ export function Features() {
     <section className="px-6 py-12">
       <div className="max-w-4xl mx-auto">
         <h2 className="text-2xl font-serif tracking-tight text-center mb-16">
-          Built for modern ML workflows
+          Built for modern research workflows
         </h2>
 
         <div className="grid md:grid-cols-3 gap-12">

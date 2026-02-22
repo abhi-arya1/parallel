@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useAgent } from "agents/react";
 import type { Id } from "@/convex/_generated/dataModel";
 
 const AGENTS_URL =
@@ -41,7 +42,6 @@ export interface Message {
 export interface AgentState {
   role: AgentRole;
   status: AgentStatus;
-  autoApprove: boolean;
   activity: Activity[];
   findings: Finding[];
   messages: Message[];
@@ -54,58 +54,56 @@ export interface AgentState {
 type ServerMessage =
   | {
       type: "state";
-      role: AgentRole;
+      agentId: AgentRole;
       status: AgentStatus;
-      autoApprove: boolean;
       activity: Activity[];
       findings: Finding[];
       messages: Message[];
     }
-  | { type: "status"; role: AgentRole; status: AgentStatus }
-  | { type: "text-delta"; role: AgentRole; text: string; streamId: string }
-  | { type: "tool-call"; role: AgentRole; toolName: string; input: unknown }
-  | { type: "tool-result"; role: AgentRole; toolName: string; output: unknown }
-  | { type: "needs-approval"; role: AgentRole; action: string; code: string }
+  | { type: "status"; agentId: AgentRole; status: AgentStatus }
+  | { type: "text-delta"; agentId: AgentRole; text: string; streamId: string }
+  | { type: "tool-call"; agentId: AgentRole; toolName: string; input: unknown }
+  | {
+      type: "tool-result";
+      agentId: AgentRole;
+      toolName: string;
+      output: unknown;
+    }
+  | { type: "needs-approval"; agentId: AgentRole; action: string; code: string }
   | {
       type: "finding";
-      role: AgentRole;
+      agentId: AgentRole;
       id: string;
       content: string;
       cellType: string;
     }
-  | { type: "finish"; role: AgentRole; text: string }
-  | { type: "error"; role: AgentRole; message: string }
-  | { type: "auto-approve"; role: AgentRole; value: boolean };
+  | { type: "finish"; agentId: AgentRole; text: string }
+  | { type: "error"; agentId: AgentRole; message: string };
 
 type ClientMessage =
-  | { type: "start"; hypothesis: string; notebookContext?: string }
-  | { type: "steer"; content: string }
-  | { type: "stop" }
-  | { type: "approve" }
-  | { type: "reject"; feedback?: string }
-  | { type: "sync" }
-  | { type: "clear" }
-  | { type: "set-auto-approve"; value: boolean };
+  | {
+      type: "start";
+      agentId: AgentRole;
+      hypothesis: string;
+      notebookContext?: string;
+    }
+  | { type: "steer"; agentId: AgentRole; content: string }
+  | { type: "stop"; agentId: AgentRole }
+  | { type: "approve"; agentId: AgentRole }
+  | { type: "reject"; agentId: AgentRole; feedback?: string }
+  | { type: "sync"; agentId: AgentRole }
+  | { type: "clear"; agentId: AgentRole };
 
 const ALL_ROLES: AgentRole[] = ["engineer", "researcher", "reviewer"];
 
 const initialState = (role: AgentRole): AgentState => ({
   role,
   status: "idle",
-  autoApprove: false,
   activity: [],
   findings: [],
   messages: [],
   connected: false,
 });
-
-function getWsUrl(role: AgentRole, workspaceId: string): string {
-  const base = AGENTS_URL.replace("http://", "ws://").replace(
-    "https://",
-    "wss://",
-  );
-  return `${base}/agents/persona-agent/${role}-${workspaceId}`;
-}
 
 export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
   const [agents, setAgents] = useState<Record<AgentRole, AgentState>>({
@@ -114,31 +112,26 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
     reviewer: initialState("reviewer"),
   });
 
-  const socketsRef = useRef<Map<AgentRole, WebSocket>>(new Map());
-  const reconnectTimeoutsRef = useRef<Map<AgentRole, NodeJS.Timeout>>(
-    new Map(),
-  );
-
   const updateAgent = useCallback(
-    (role: AgentRole, update: Partial<AgentState>) => {
+    (agentId: AgentRole, update: Partial<AgentState>) => {
       setAgents((prev) => ({
         ...prev,
-        [role]: { ...prev[role], ...update },
+        [agentId]: { ...prev[agentId], ...update },
       }));
     },
     [],
   );
 
   const handleMessage = useCallback(
-    (role: AgentRole, event: MessageEvent) => {
+    (event: MessageEvent) => {
       try {
         const msg = JSON.parse(event.data) as ServerMessage;
+        const agentId = msg.agentId;
 
         switch (msg.type) {
           case "state":
-            updateAgent(role, {
+            updateAgent(agentId, {
               status: msg.status,
-              autoApprove: msg.autoApprove,
               activity: msg.activity,
               findings: msg.findings,
               messages: msg.messages,
@@ -148,18 +141,18 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
             break;
 
           case "status":
-            updateAgent(role, { status: msg.status });
+            updateAgent(agentId, { status: msg.status });
             break;
 
           case "text-delta":
-            updateAgent(role, {
+            updateAgent(agentId, {
               streamingText: msg.text,
               streamId: msg.streamId,
             });
             break;
 
           case "needs-approval":
-            updateAgent(role, {
+            updateAgent(agentId, {
               status: "awaiting_approval",
               pendingCode: msg.code,
             });
@@ -168,10 +161,10 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
           case "tool-call":
             setAgents((prev) => ({
               ...prev,
-              [role]: {
-                ...prev[role],
+              [agentId]: {
+                ...prev[agentId],
                 activity: [
-                  ...prev[role].activity,
+                  ...prev[agentId].activity,
                   {
                     id: `tool-${Date.now()}`,
                     type: "tool-call",
@@ -186,10 +179,10 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
           case "tool-result":
             setAgents((prev) => ({
               ...prev,
-              [role]: {
-                ...prev[role],
+              [agentId]: {
+                ...prev[agentId],
                 activity: [
-                  ...prev[role].activity,
+                  ...prev[agentId].activity,
                   {
                     id: `result-${Date.now()}`,
                     type: "tool-result",
@@ -204,10 +197,10 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
           case "finding":
             setAgents((prev) => ({
               ...prev,
-              [role]: {
-                ...prev[role],
+              [agentId]: {
+                ...prev[agentId],
                 findings: [
-                  ...prev[role].findings,
+                  ...prev[agentId].findings,
                   {
                     id: msg.id,
                     content: msg.content,
@@ -221,7 +214,7 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
             break;
 
           case "finish":
-            updateAgent(role, {
+            updateAgent(agentId, {
               status: "done",
               streamingText: undefined,
               streamId: undefined,
@@ -229,17 +222,17 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
             break;
 
           case "error":
-            updateAgent(role, {
+            updateAgent(agentId, {
               status: "error",
               streamingText: undefined,
               streamId: undefined,
             });
             setAgents((prev) => ({
               ...prev,
-              [role]: {
-                ...prev[role],
+              [agentId]: {
+                ...prev[agentId],
                 activity: [
-                  ...prev[role].activity,
+                  ...prev[agentId].activity,
                   {
                     id: `error-${Date.now()}`,
                     type: "error",
@@ -250,10 +243,6 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
               },
             }));
             break;
-
-          case "auto-approve":
-            updateAgent(role, { autoApprove: msg.value });
-            break;
         }
       } catch {
         console.error("Failed to parse message:", event.data);
@@ -262,137 +251,133 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
     [updateAgent],
   );
 
-  const connect = useCallback(
-    (role: AgentRole, wsId: string) => {
-      const existing = socketsRef.current.get(role);
-      if (existing && existing.readyState === WebSocket.OPEN) return;
+  const handleOpen = useCallback(() => {
+    setAgents((prev) => {
+      const updated = { ...prev };
+      for (const role of ALL_ROLES) {
+        updated[role] = { ...updated[role], connected: true };
+      }
+      return updated;
+    });
+  }, []);
 
-      const timeout = reconnectTimeoutsRef.current.get(role);
-      if (timeout) clearTimeout(timeout);
+  const handleClose = useCallback(() => {
+    setAgents((prev) => {
+      const updated = { ...prev };
+      for (const role of ALL_ROLES) {
+        updated[role] = { ...updated[role], connected: false };
+      }
+      return updated;
+    });
+  }, []);
 
-      const ws = new WebSocket(getWsUrl(role, wsId));
+  const connection = useAgent({
+    agent: "workspace-agent",
+    name: workspaceId || "",
+    host: AGENTS_URL,
+    onMessage: handleMessage,
+    onOpen: handleOpen,
+    onClose: handleClose,
+  });
 
-      ws.onopen = () => {
-        console.log(`[Agent:${role}] WebSocket connected`);
-        updateAgent(role, { connected: true });
-        ws.send(JSON.stringify({ type: "sync" }));
-      };
-
-      ws.onmessage = (e) => handleMessage(role, e);
-
-      ws.onclose = () => {
-        updateAgent(role, { connected: false });
-        socketsRef.current.delete(role);
-        const t = setTimeout(() => connect(role, wsId), 2000);
-        reconnectTimeoutsRef.current.set(role, t);
-      };
-
-      ws.onerror = () => {
-        ws.close();
-      };
-
-      socketsRef.current.set(role, ws);
+  const send = useCallback(
+    (message: ClientMessage) => {
+      if (connection && connection.readyState === WebSocket.OPEN) {
+        connection.send(JSON.stringify(message));
+      }
     },
-    [handleMessage, updateAgent],
+    [connection],
+  );
+
+  const syncAgent = useCallback(
+    (agentId: AgentRole) => {
+      send({ type: "sync", agentId });
+    },
+    [send],
   );
 
   useEffect(() => {
-    if (!workspaceId) return;
-
+    if (!workspaceId || !connection || connection.readyState !== WebSocket.OPEN)
+      return;
     for (const role of ALL_ROLES) {
-      connect(role, workspaceId);
+      syncAgent(role);
     }
+  }, [workspaceId, connection?.readyState, syncAgent]);
 
-    return () => {
-      for (const ws of socketsRef.current.values()) {
-        ws.close();
-      }
-      socketsRef.current.clear();
-      for (const timeout of reconnectTimeoutsRef.current.values()) {
-        clearTimeout(timeout);
-      }
-      reconnectTimeoutsRef.current.clear();
-    };
-  }, [workspaceId, connect]);
-
-  const send = useCallback((role: AgentRole, message: ClientMessage) => {
-    const ws = socketsRef.current.get(role);
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      console.log(`[Agent:${role}] Sending message:`, message.type);
-      ws.send(JSON.stringify(message));
-    } else {
-      console.warn(
-        `[Agent:${role}] Cannot send message, WebSocket not open. State:`,
-        ws?.readyState,
-      );
-    }
-  }, []);
-
-  const sendAll = useCallback(
-    (message: ClientMessage) => {
+  const startResearch = useCallback(
+    (hypothesis: string, notebookContext?: string) => {
       for (const role of ALL_ROLES) {
-        send(role, message);
+        send({ type: "start", agentId: role, hypothesis, notebookContext });
       }
     },
     [send],
   );
 
-  const startResearch = useCallback(
-    (hypothesis: string, notebookContext?: string) => {
-      sendAll({ type: "start", hypothesis, notebookContext });
-    },
-    [sendAll],
-  );
-
   const steer = useCallback(
     (role: AgentRole, content: string) => {
-      send(role, { type: "steer", content });
+      setAgents((prev) => ({
+        ...prev,
+        [role]: {
+          ...prev[role],
+          messages: [
+            ...prev[role].messages,
+            { role: "user" as const, content, timestamp: Date.now() },
+          ],
+          status: "thinking" as AgentStatus,
+        },
+      }));
+      send({ type: "steer", agentId: role, content });
     },
     [send],
   );
 
   const stop = useCallback(
     (role: AgentRole) => {
-      send(role, { type: "stop" });
+      send({ type: "stop", agentId: role });
     },
     [send],
   );
 
   const stopAll = useCallback(() => {
-    sendAll({ type: "stop" });
-  }, [sendAll]);
+    for (const role of ALL_ROLES) {
+      send({ type: "stop", agentId: role });
+    }
+  }, [send]);
 
   const approve = useCallback(
     (role: AgentRole) => {
-      send(role, { type: "approve" });
+      send({ type: "approve", agentId: role });
     },
     [send],
   );
 
   const reject = useCallback(
     (role: AgentRole, feedback?: string) => {
-      send(role, { type: "reject", feedback });
+      send({ type: "reject", agentId: role, feedback });
     },
     [send],
   );
 
   const clear = useCallback(
     (role: AgentRole) => {
-      send(role, { type: "clear" });
+      setAgents((prev) => ({
+        ...prev,
+        [role]: initialState(role),
+      }));
+      send({ type: "clear", agentId: role });
     },
     [send],
   );
 
   const clearAll = useCallback(() => {
-    sendAll({ type: "clear" });
-  }, [sendAll]);
-
-  const setAutoApprove = useCallback(
-    (role: AgentRole, value: boolean) => {
-      send(role, { type: "set-auto-approve", value });
-    },
-    [send],
-  );
+    for (const role of ALL_ROLES) {
+      setAgents((prev) => ({
+        ...prev,
+        [role]: initialState(role),
+      }));
+      send({ type: "clear", agentId: role });
+    }
+  }, [send]);
 
   const hasActiveAgents = Object.values(agents).some((a) =>
     ["thinking", "working", "awaiting_approval"].includes(a.status),
@@ -412,6 +397,6 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
     reject,
     clear,
     clearAll,
-    setAutoApprove,
+    syncAgent,
   };
 }

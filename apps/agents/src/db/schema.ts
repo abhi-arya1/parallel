@@ -25,6 +25,7 @@ export const conversationsTable = sqliteTable(
   "conversations",
   {
     id: text().primaryKey(),
+    agentId: text().notNull(),
     active: int().notNull().default(0),
     context: text(),
     compactionCount: int().notNull().default(0),
@@ -33,7 +34,10 @@ export const conversationsTable = sqliteTable(
     updatedAt: text().notNull(),
     closedAt: text(),
   },
-  (table) => [index("conversations_active_index").on(table.active)],
+  (table) => [
+    index("conversations_agent_index").on(table.agentId),
+    index("conversations_active_index").on(table.active),
+  ],
 );
 
 export const messagesTable = sqliteTable(
@@ -42,6 +46,7 @@ export const messagesTable = sqliteTable(
     conversationId: text()
       .notNull()
       .references(() => conversationsTable.id, { onDelete: "cascade" }),
+    agentId: text().notNull(),
     sequence: int().notNull(),
     role: text().notNull(),
     content: text({ mode: "json" }).notNull(),
@@ -52,6 +57,7 @@ export const messagesTable = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.conversationId, table.sequence] }),
+    index("messages_agent_index").on(table.agentId),
     index("messages_conversation_index").on(table.conversationId),
     index("messages_role_index").on(table.role),
     index("messages_conversation_sequence_index").on(
@@ -65,6 +71,7 @@ export const activityTable = sqliteTable(
   "activity",
   {
     id: text().primaryKey(),
+    agentId: text().notNull(),
     type: text().notNull(),
     content: text({ mode: "json" }),
     streamId: text(),
@@ -72,6 +79,7 @@ export const activityTable = sqliteTable(
     createdAt: int().notNull(),
   },
   (table) => [
+    index("activity_agent_index").on(table.agentId),
     index("activity_created_index").on(table.createdAt),
     index("activity_stream_index").on(table.streamId),
   ],
@@ -81,15 +89,24 @@ export const findingsTable = sqliteTable(
   "findings",
   {
     id: text().primaryKey(),
+    agentId: text().notNull(),
     content: text().notNull(),
     cellType: text().default("markdown"),
     createdAt: int().notNull(),
     syncedToNotebook: int().default(0),
   },
-  (table) => [index("findings_created_index").on(table.createdAt)],
+  (table) => [
+    index("findings_agent_index").on(table.agentId),
+    index("findings_created_index").on(table.createdAt),
+  ],
 );
 
-export const stateTable = sqliteTable("state", {
-  key: text().primaryKey(),
-  value: text(),
-});
+export const stateTable = sqliteTable(
+  "state",
+  {
+    agentId: text().notNull(),
+    key: text().notNull(),
+    value: text(),
+  },
+  (table) => [primaryKey({ columns: [table.agentId, table.key] })],
+);

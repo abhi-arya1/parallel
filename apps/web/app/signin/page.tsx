@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import {
 } from "@hugeicons-pro/core-duotone-rounded";
 
 export default function SignInPage() {
+  const router = useRouter();
   const { signIn } = useAuthActions();
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
   const [name, setName] = useState("");
@@ -34,6 +36,7 @@ export default function SignInPage() {
         flow,
         ...(flow === "signUp" && { name }),
       });
+      router.push("/projects");
     } catch {
       setError(
         flow === "signIn"
@@ -49,7 +52,7 @@ export default function SignInPage() {
     setError("");
     setLoading(true);
     try {
-      await signIn("github");
+      await signIn("github", { redirectTo: "/projects" });
     } catch {
       setError("GitHub sign-in failed.");
       setLoading(false);
@@ -61,6 +64,7 @@ export default function SignInPage() {
     setLoading(true);
     try {
       await signIn("anonymous");
+      router.push("/projects");
     } catch {
       setError("Anonymous sign-in failed.");
       setLoading(false);

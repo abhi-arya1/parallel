@@ -1,7 +1,7 @@
 import { routeAgentRequest } from "agents";
 
 export { ParallelAgent } from "./agent";
-export { PersonaAgent } from "./persona-agent";
+export { WorkspaceAgent } from "./workspace-agent";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,7 +28,6 @@ export default {
       return jsonResponse({ status: "ok", timestamp: Date.now() });
     }
 
-    // routeAgentRequest handles CORS and WebSocket upgrades internally
     const agentResponse = await routeAgentRequest(request, env, {
       cors: {
         "Access-Control-Allow-Origin": "*",

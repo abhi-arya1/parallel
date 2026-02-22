@@ -10,7 +10,7 @@ import {
   type DrizzleSqliteDODatabase,
 } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { smoothStream, streamText, stepCountIs, tool, ToolSet } from "ai";
 import { gateway } from "@ai-sdk/gateway";
 import { nanoid } from "nanoid";
@@ -41,14 +41,18 @@ type AgentStatus =
   | "error";
 
 type ClientMessage =
-  | { type: "start"; hypothesis: string; notebookContext?: string }
-  | { type: "steer"; content: string }
-  | { type: "stop" }
-  | { type: "approve" }
-  | { type: "reject"; feedback?: string }
-  | { type: "sync" }
-  | { type: "clear" }
-  | { type: "set-auto-approve"; value: boolean };
+  | {
+      type: "start";
+      agentId: AgentRole;
+      hypothesis: string;
+      notebookContext?: string;
+    }
+  | { type: "steer"; agentId: AgentRole; content: string }
+  | { type: "stop"; agentId: AgentRole }
+  | { type: "approve"; agentId: AgentRole }
+  | { type: "reject"; agentId: AgentRole; feedback?: string }
+  | { type: "sync"; agentId: AgentRole }
+  | { type: "clear"; agentId: AgentRole };
 
 type Activity = {
   id: string;
@@ -140,13 +144,11 @@ class ConvexClient {
   }
 }
 
-export class PersonaAgent extends Agent<Env> {
+export class WorkspaceAgent extends Agent<Env> {
   storage: DurableObjectStorage;
   db: DrizzleSqliteDODatabase;
   connections: Set<Connection> = new Set();
-  _role: AgentRole | null = null;
-  _workspaceId: string | null = null;
-  abortController: AbortController | null = null;
+  abortControllers: Map<AgentRole, AbortController> = new Map();
   convex: ConvexClient | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -161,54 +163,15 @@ export class PersonaAgent extends Agent<Env> {
     });
   }
 
-  #getName(): string {
-    try {
-      return this.name;
-    } catch {
-      return "unknown";
-    }
-  }
-
-  get role(): AgentRole {
-    if (!this._role) {
-      const name = this.#getName();
-      const parts = name.split("-");
-      this._role = (parts[0] as AgentRole) || "researcher";
-    }
-    return this._role;
-  }
-
   get workspaceId(): string {
-    if (!this._workspaceId) {
-      const name = this.#getName();
-      const parts = name.split("-");
-      this._workspaceId = parts.slice(1).join("-");
-    }
-    return this._workspaceId;
+    return this.name;
   }
 
   async onConnect(
     connection: Connection,
     _ctx: ConnectionContext,
   ): Promise<void> {
-    console.log("onConnect called for", this.#getName());
     this.connections.add(connection);
-    try {
-      // Send minimal state first to complete handshake
-      connection.send(
-        JSON.stringify({
-          type: "state",
-          role: this.role,
-          status: "idle",
-          autoApprove: false,
-          activity: [],
-          findings: [],
-          messages: [],
-        }),
-      );
-    } catch (error) {
-      console.error("Error in onConnect:", error);
-    }
   }
 
   async onClose(connection: Connection): Promise<void> {
@@ -218,71 +181,44 @@ export class PersonaAgent extends Agent<Env> {
   async onMessage(_connection: Connection, message: WSMessage): Promise<void> {
     if (typeof message !== "string") return;
     const msg = JSON.parse(message) as ClientMessage;
+    const agentId = msg.agentId;
 
     switch (msg.type) {
       case "start":
-        await this.handleStart(msg.hypothesis, msg.notebookContext);
+        await this.handleStart(agentId, msg.hypothesis, msg.notebookContext);
         break;
       case "steer":
-        await this.handleSteer(msg.content);
+        await this.handleSteer(agentId, msg.content);
         break;
       case "stop":
-        await this.handleStop();
+        await this.handleStop(agentId);
         break;
       case "approve":
-        await this.handleApprove();
+        await this.handleApprove(agentId);
         break;
       case "reject":
-        await this.handleReject(msg.feedback);
+        await this.handleReject(agentId, msg.feedback);
         break;
       case "sync":
-        await this.broadcastState();
+        await this.sendAgentState(agentId);
         break;
       case "clear":
-        await this.handleClear();
-        break;
-      case "set-auto-approve":
-        await this.setAutoApprove(msg.value);
+        await this.handleClear(agentId);
         break;
     }
   }
 
-  async sendState(connection: Connection): Promise<void> {
-    const [activity, findings, messages, status, autoApprove] =
-      await Promise.all([
-        this.getActivity(),
-        this.getFindings(),
-        this.getMessages(),
-        this.getKV("status"),
-        this.getKV("autoApprove"),
-      ]);
-    connection.send(
-      JSON.stringify({
-        type: "state",
-        role: this.role,
-        status: status || "idle",
-        autoApprove: autoApprove === "true",
-        activity,
-        findings,
-        messages,
-      }),
-    );
-  }
-
-  async broadcastState(): Promise<void> {
-    const [activity, findings, messages, status, autoApprove] =
-      await Promise.all([
-        this.getActivity(),
-        this.getFindings(),
-        this.getMessages(),
-        this.getKV("status"),
-        this.getKV("autoApprove"),
-      ]);
+  async sendAgentState(agentId: AgentRole): Promise<void> {
+    const [activity, findings, messages, status] = await Promise.all([
+      this.getActivity(agentId),
+      this.getFindings(agentId),
+      this.getMessages(agentId),
+      this.getKV(agentId, "status"),
+    ]);
     this.broadcast({
       type: "state",
-      role: this.role,
+      agentId,
       status: status || "idle",
-      autoApprove: autoApprove === "true",
       activity,
       findings,
       messages,
@@ -301,136 +237,138 @@ export class PersonaAgent extends Agent<Env> {
   }
 
   async handleStart(
+    agentId: AgentRole,
     hypothesis: string,
     notebookContext?: string,
   ): Promise<void> {
-    await this.setKV("status", "thinking");
-    await this.convex?.updateAgentStatus(
-      this.workspaceId,
-      this.role,
-      "thinking",
-    );
-    this.broadcast({ type: "status", role: this.role, status: "thinking" });
+    await this.setKV(agentId, "status", "thinking");
+    await this.convex?.updateAgentStatus(this.workspaceId, agentId, "thinking");
+    this.broadcast({ type: "status", agentId, status: "thinking" });
 
-    const systemPrompt = this.getSystemPrompt();
+    const systemPrompt = this.getSystemPrompt(agentId);
     const contextPart = notebookContext
       ? `\n\nNotebook context:\n${notebookContext}`
       : "";
-    await this.addMessage("user", hypothesis);
+    await this.addMessage(agentId, "user", hypothesis);
     await this.runAgent(
+      agentId,
       systemPrompt,
       `Hypothesis: ${hypothesis}${contextPart}`,
     );
   }
 
-  async handleSteer(content: string): Promise<void> {
-    const status = await this.getKV("status");
+  async handleSteer(agentId: AgentRole, content: string): Promise<void> {
+    const status = await this.getKV(agentId, "status");
     if (["idle", "done", "error"].includes(status || "")) {
-      await this.setKV("status", "thinking");
+      await this.setKV(agentId, "status", "thinking");
       await this.convex?.updateAgentStatus(
         this.workspaceId,
-        this.role,
+        agentId,
         "thinking",
       );
-      this.broadcast({ type: "status", role: this.role, status: "thinking" });
+      this.broadcast({ type: "status", agentId, status: "thinking" });
     }
-    await this.addMessage("user", content);
-    const messages = await this.getMessages();
+    await this.addMessage(agentId, "user", content);
+    const messages = await this.getMessages(agentId);
     await this.runAgent(
-      this.getSystemPrompt(),
+      agentId,
+      this.getSystemPrompt(agentId),
       messages.map((m) => `${m.role}: ${m.content}`).join("\n\n"),
     );
   }
 
-  async handleStop(): Promise<void> {
-    this.abortController?.abort();
-    this.abortController = null;
-    await this.setKV("status", "idle");
-    await this.convex?.updateAgentStatus(this.workspaceId, this.role, "idle");
-    this.broadcast({ type: "status", role: this.role, status: "idle" });
+  async handleStop(agentId: AgentRole): Promise<void> {
+    const controller = this.abortControllers.get(agentId);
+    controller?.abort();
+    this.abortControllers.delete(agentId);
+    await this.setKV(agentId, "status", "idle");
+    await this.convex?.updateAgentStatus(this.workspaceId, agentId, "idle");
+    this.broadcast({ type: "status", agentId, status: "idle" });
   }
 
-  async handleApprove(): Promise<void> {
-    const pendingCode = await this.getKV("pendingCode");
+  async handleApprove(agentId: AgentRole): Promise<void> {
+    const pendingCode = await this.getKV(agentId, "pendingCode");
     if (!pendingCode) return;
 
-    await this.setKV("status", "working");
-    await this.convex?.updateAgentStatus(
-      this.workspaceId,
-      this.role,
-      "working",
-    );
-    this.broadcast({ type: "status", role: this.role, status: "working" });
+    await this.setKV(agentId, "status", "working");
+    await this.convex?.updateAgentStatus(this.workspaceId, agentId, "working");
+    this.broadcast({ type: "status", agentId, status: "working" });
 
     try {
       const result = await this.executeCode(pendingCode);
-      await this.addActivity("tool-result", {
+      await this.addActivity(agentId, "tool-result", {
         toolName: "execute_code",
         output: result,
       });
       await this.convex?.postActivity(
         this.workspaceId,
-        this.role,
+        agentId,
         "tool-result",
-        { toolName: "execute_code", output: result },
+        {
+          toolName: "execute_code",
+          output: result,
+        },
       );
       this.broadcast({
         type: "tool-result",
-        role: this.role,
+        agentId,
         toolName: "execute_code",
         output: result,
       });
-      await this.setKV("pendingCode", null);
-      await this.setKV("status", "done");
-      await this.convex?.updateAgentStatus(this.workspaceId, this.role, "done");
-      this.broadcast({ type: "status", role: this.role, status: "done" });
+      await this.setKV(agentId, "pendingCode", null);
+      await this.setKV(agentId, "status", "done");
+      await this.convex?.updateAgentStatus(this.workspaceId, agentId, "done");
+      this.broadcast({ type: "status", agentId, status: "done" });
     } catch (error) {
       const errMsg =
         error instanceof Error ? error.message : "Execution failed";
-      await this.addActivity("error", { message: errMsg });
-      await this.setKV("status", "error");
-      await this.convex?.updateAgentStatus(
-        this.workspaceId,
-        this.role,
-        "error",
-      );
-      this.broadcast({ type: "error", role: this.role, message: errMsg });
+      await this.addActivity(agentId, "error", { message: errMsg });
+      await this.setKV(agentId, "status", "error");
+      await this.convex?.updateAgentStatus(this.workspaceId, agentId, "error");
+      this.broadcast({ type: "error", agentId, message: errMsg });
     }
   }
 
-  async handleReject(feedback?: string): Promise<void> {
-    await this.setKV("pendingCode", null);
-    await this.setKV("status", "done");
-    await this.addActivity("approval", { approved: false, feedback });
-    await this.convex?.updateAgentStatus(this.workspaceId, this.role, "done");
-    this.broadcast({ type: "status", role: this.role, status: "done" });
+  async handleReject(agentId: AgentRole, feedback?: string): Promise<void> {
+    await this.setKV(agentId, "pendingCode", null);
+    await this.setKV(agentId, "status", "done");
+    await this.addActivity(agentId, "approval", { approved: false, feedback });
+    await this.convex?.updateAgentStatus(this.workspaceId, agentId, "done");
+    this.broadcast({ type: "status", agentId, status: "done" });
   }
 
-  async handleClear(): Promise<void> {
-    await this.db.delete(activityTable);
-    await this.db.delete(findingsTable);
-    await this.db.delete(messagesTable);
-    await this.db.delete(conversationsTable);
-    await this.setKV("status", "idle");
-    await this.setKV("pendingCode", null);
-    await this.convex?.updateAgentStatus(this.workspaceId, this.role, "idle");
-    await this.broadcastState();
+  async handleClear(agentId: AgentRole): Promise<void> {
+    const controller = this.abortControllers.get(agentId);
+    controller?.abort();
+    this.abortControllers.delete(agentId);
+
+    await this.db
+      .delete(activityTable)
+      .where(eq(activityTable.agentId, agentId));
+    await this.db
+      .delete(findingsTable)
+      .where(eq(findingsTable.agentId, agentId));
+    await this.db
+      .delete(messagesTable)
+      .where(eq(messagesTable.agentId, agentId));
+    await this.db
+      .delete(conversationsTable)
+      .where(eq(conversationsTable.agentId, agentId));
+    await this.db.delete(stateTable).where(eq(stateTable.agentId, agentId));
+
+    await this.convex?.updateAgentStatus(this.workspaceId, agentId, "idle");
+    await this.sendAgentState(agentId);
   }
 
-  async setAutoApprove(value: boolean): Promise<void> {
-    await this.setKV("autoApprove", value ? "true" : "false");
-    this.broadcast({ type: "auto-approve", role: this.role, value });
-  }
-
-  getSystemPrompt(): string {
-    return this.role === "engineer"
+  getSystemPrompt(agentId: AgentRole): string {
+    return agentId === "engineer"
       ? ENGINEER_SYSTEM_PROMPT
-      : this.role === "researcher"
+      : agentId === "researcher"
         ? RESEARCHER_SYSTEM_PROMPT
         : REVIEWER_SYSTEM_PROMPT;
   }
 
-  createResearcherTools(): ToolSet {
+  createResearcherTools(agentId: AgentRole): ToolSet {
     const agent = this;
     return {
       searchWeb: tool({
@@ -466,26 +404,23 @@ export class PersonaAgent extends Agent<Env> {
     };
   }
 
-  createEngineerTools(): ToolSet {
+  createEngineerTools(agentId: AgentRole): ToolSet {
     const agent = this;
     return {
       executeCode: tool({
         description: "Execute Python code in a sandbox",
         inputSchema: executeCodeInputSchema,
         execute: async (args: z.infer<typeof executeCodeInputSchema>) => {
-          if ((await agent.getKV("autoApprove")) === "true") {
-            return agent.executeCode(args.code);
-          }
-          await agent.setKV("pendingCode", args.code);
-          await agent.setKV("status", "awaiting_approval");
+          await agent.setKV(agentId, "pendingCode", args.code);
+          await agent.setKV(agentId, "status", "awaiting_approval");
           await agent.convex?.updateAgentStatus(
             agent.workspaceId,
-            agent.role,
+            agentId,
             "awaiting_approval",
           );
           agent.broadcast({
             type: "needs-approval",
-            role: agent.role,
+            agentId,
             action: "execute_code",
             code: args.code,
           });
@@ -510,21 +445,30 @@ export class PersonaAgent extends Agent<Env> {
     };
   }
 
-  getTools(): ToolSet {
-    if (this.role === "researcher") {
-      return this.createResearcherTools();
+  getTools(agentId: AgentRole): ToolSet {
+    if (agentId === "researcher") {
+      return this.createResearcherTools(agentId);
     }
-    if (this.role === "engineer") {
-      return this.createEngineerTools();
+    if (agentId === "engineer") {
+      return this.createEngineerTools(agentId);
     }
     return {};
   }
 
-  async runAgent(systemPrompt: string, userPrompt: string): Promise<void> {
-    this.abortController = new AbortController();
+  async runAgent(
+    agentId: AgentRole,
+    systemPrompt: string,
+    userPrompt: string,
+  ): Promise<void> {
+    const existingController = this.abortControllers.get(agentId);
+    existingController?.abort();
+
+    const abortController = new AbortController();
+    this.abortControllers.set(agentId, abortController);
+
     const streamId = nanoid();
     let fullText = "";
-    const tools = this.getTools();
+    const tools = this.getTools(agentId);
 
     try {
       const { textStream } = streamText({
@@ -537,40 +481,46 @@ export class PersonaAgent extends Agent<Env> {
           delayInMs: 20,
           chunking: "word",
         }),
-        abortSignal: this.abortController.signal,
+        abortSignal: abortController.signal,
         onChunk: async ({ chunk }) => {
           if (chunk.type === "tool-call") {
             const input = "input" in chunk ? chunk.input : undefined;
-            await this.addActivity("tool-call", {
+            await this.addActivity(agentId, "tool-call", {
               toolName: chunk.toolName,
               input,
             });
             await this.convex?.postActivity(
               this.workspaceId,
-              this.role,
+              agentId,
               "tool-call",
-              { toolName: chunk.toolName, input },
+              {
+                toolName: chunk.toolName,
+                input,
+              },
             );
             this.broadcast({
               type: "tool-call",
-              role: this.role,
+              agentId,
               toolName: chunk.toolName,
               input,
             });
           } else if (chunk.type === "tool-result") {
-            await this.addActivity("tool-result", {
+            await this.addActivity(agentId, "tool-result", {
               toolName: chunk.toolName,
               output: chunk.output,
             });
             await this.convex?.postActivity(
               this.workspaceId,
-              this.role,
+              agentId,
               "tool-result",
-              { toolName: chunk.toolName, output: chunk.output },
+              {
+                toolName: chunk.toolName,
+                output: chunk.output,
+              },
             );
             this.broadcast({
               type: "tool-result",
-              role: this.role,
+              agentId,
               toolName: chunk.toolName,
               output: chunk.output,
             });
@@ -578,33 +528,34 @@ export class PersonaAgent extends Agent<Env> {
         },
         onFinish: async ({ text }) => {
           await this.addActivity(
+            agentId,
             "reasoning",
             { content: text },
             streamId,
             false,
           );
-          await this.addMessage("assistant", text);
-          await this.createFinding(text);
-          await this.setKV("status", "done");
+          await this.addMessage(agentId, "assistant", text);
+          await this.createFinding(agentId, text);
+          await this.setKV(agentId, "status", "done");
           await this.convex?.updateAgentStatus(
             this.workspaceId,
-            this.role,
+            agentId,
             "done",
           );
-          this.broadcast({ type: "finish", role: this.role, text });
-          this.broadcast({ type: "status", role: this.role, status: "done" });
+          this.broadcast({ type: "finish", agentId, text });
+          this.broadcast({ type: "status", agentId, status: "done" });
         },
         onError: async ({ error }) => {
           const errMsg =
             error instanceof Error ? error.message : "Unknown error";
-          await this.addActivity("error", { message: errMsg });
-          await this.setKV("status", "error");
+          await this.addActivity(agentId, "error", { message: errMsg });
+          await this.setKV(agentId, "status", "error");
           await this.convex?.updateAgentStatus(
             this.workspaceId,
-            this.role,
+            agentId,
             "error",
           );
-          this.broadcast({ type: "error", role: this.role, message: errMsg });
+          this.broadcast({ type: "error", agentId, message: errMsg });
         },
       });
 
@@ -614,32 +565,22 @@ export class PersonaAgent extends Agent<Env> {
         if (Date.now() - lastBroadcast > 50) {
           this.broadcast({
             type: "text-delta",
-            role: this.role,
+            agentId,
             text: fullText,
             streamId,
           });
           lastBroadcast = Date.now();
         }
       }
-      await this.addActivity(
-        "reasoning",
-        { content: fullText },
-        streamId,
-        false,
-      );
     } catch (error) {
-      if (this.abortController?.signal.aborted) return;
+      if (abortController.signal.aborted) return;
       const errMsg = error instanceof Error ? error.message : "Unknown error";
-      await this.addActivity("error", { message: errMsg });
-      await this.setKV("status", "error");
-      await this.convex?.updateAgentStatus(
-        this.workspaceId,
-        this.role,
-        "error",
-      );
-      this.broadcast({ type: "error", role: this.role, message: errMsg });
+      await this.addActivity(agentId, "error", { message: errMsg });
+      await this.setKV(agentId, "status", "error");
+      await this.convex?.updateAgentStatus(this.workspaceId, agentId, "error");
+      this.broadcast({ type: "error", agentId, message: errMsg });
     } finally {
-      this.abortController = null;
+      this.abortControllers.delete(agentId);
     }
   }
 
@@ -652,27 +593,37 @@ export class PersonaAgent extends Agent<Env> {
     return res.json();
   }
 
-  async getKV(key: string): Promise<string | null> {
+  async getKV(agentId: AgentRole, key: string): Promise<string | null> {
     const row = await this.db
       .select()
       .from(stateTable)
-      .where(eq(stateTable.key, key))
+      .where(and(eq(stateTable.agentId, agentId), eq(stateTable.key, key)))
       .get();
     return row?.value ?? null;
   }
 
-  async setKV(key: string, value: string | null): Promise<void> {
+  async setKV(
+    agentId: AgentRole,
+    key: string,
+    value: string | null,
+  ): Promise<void> {
     if (value === null) {
-      await this.db.delete(stateTable).where(eq(stateTable.key, key));
+      await this.db
+        .delete(stateTable)
+        .where(and(eq(stateTable.agentId, agentId), eq(stateTable.key, key)));
     } else {
       await this.db
         .insert(stateTable)
-        .values({ key, value })
-        .onConflictDoUpdate({ target: stateTable.key, set: { value } });
+        .values({ agentId, key, value })
+        .onConflictDoUpdate({
+          target: [stateTable.agentId, stateTable.key],
+          set: { value },
+        });
     }
   }
 
   async addActivity(
+    agentId: AgentRole,
     type: string,
     content: unknown,
     streamId?: string,
@@ -680,6 +631,7 @@ export class PersonaAgent extends Agent<Env> {
   ): Promise<void> {
     await this.db.insert(activityTable).values({
       id: nanoid(),
+      agentId,
       type,
       content: content as Record<string, unknown>,
       streamId,
@@ -688,10 +640,11 @@ export class PersonaAgent extends Agent<Env> {
     });
   }
 
-  async getActivity(): Promise<Activity[]> {
+  async getActivity(agentId: AgentRole): Promise<Activity[]> {
     const rows = await this.db
       .select()
       .from(activityTable)
+      .where(eq(activityTable.agentId, agentId))
       .orderBy(activityTable.createdAt);
     return rows.map((r) => ({
       id: r.id,
@@ -703,8 +656,12 @@ export class PersonaAgent extends Agent<Env> {
     }));
   }
 
-  async addMessage(role: "user" | "assistant", content: string): Promise<void> {
-    const convId = "main";
+  async addMessage(
+    agentId: AgentRole,
+    role: "user" | "assistant",
+    content: string,
+  ): Promise<void> {
+    const convId = agentId;
     const now = new Date().toISOString();
     const existing = await this.db
       .select()
@@ -714,7 +671,7 @@ export class PersonaAgent extends Agent<Env> {
     if (!existing) {
       await this.db
         .insert(conversationsTable)
-        .values({ id: convId, createdAt: now, updatedAt: now });
+        .values({ id: convId, agentId, createdAt: now, updatedAt: now });
     }
     const lastMsg = await this.db
       .select()
@@ -725,6 +682,7 @@ export class PersonaAgent extends Agent<Env> {
       .get();
     await this.db.insert(messagesTable).values({
       conversationId: convId,
+      agentId,
       sequence: (lastMsg?.sequence ?? 0) + 1,
       role,
       content: content as unknown as Record<string, unknown>,
@@ -732,11 +690,11 @@ export class PersonaAgent extends Agent<Env> {
     });
   }
 
-  async getMessages(): Promise<Message[]> {
+  async getMessages(agentId: AgentRole): Promise<Message[]> {
     const rows = await this.db
       .select()
       .from(messagesTable)
-      .where(eq(messagesTable.conversationId, "main"))
+      .where(eq(messagesTable.agentId, agentId))
       .orderBy(messagesTable.sequence);
     return rows.map((r) => ({
       role: r.role as "user" | "assistant",
@@ -746,10 +704,15 @@ export class PersonaAgent extends Agent<Env> {
     }));
   }
 
-  async createFinding(content: string, cellType = "markdown"): Promise<void> {
+  async createFinding(
+    agentId: AgentRole,
+    content: string,
+    cellType = "markdown",
+  ): Promise<void> {
     const id = nanoid();
     await this.db.insert(findingsTable).values({
       id,
+      agentId,
       content,
       cellType,
       createdAt: Date.now(),
@@ -757,17 +720,18 @@ export class PersonaAgent extends Agent<Env> {
     });
     await this.convex?.createFinding(
       this.workspaceId,
-      this.role,
+      agentId,
       content,
       cellType,
     );
-    this.broadcast({ type: "finding", role: this.role, id, content, cellType });
+    this.broadcast({ type: "finding", agentId, id, content, cellType });
   }
 
-  async getFindings(): Promise<Finding[]> {
+  async getFindings(agentId: AgentRole): Promise<Finding[]> {
     const rows = await this.db
       .select()
       .from(findingsTable)
+      .where(eq(findingsTable.agentId, agentId))
       .orderBy(findingsTable.createdAt);
     return rows.map((r) => ({
       id: r.id,

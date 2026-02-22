@@ -23,8 +23,15 @@ interface Activity {
   createdAt: number;
 }
 
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+}
+
 interface AgentActivityStreamProps {
   activity: Activity[];
+  messages: Message[];
   streamingText?: string;
   pendingCode?: string;
   isAwaitingApproval?: boolean;

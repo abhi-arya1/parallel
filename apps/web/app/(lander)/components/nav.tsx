@@ -21,12 +21,22 @@ export function Nav() {
         />
         <span className="font-serif text-lg tracking-tight">Parallel</span>
       </Link>
-      <Link
-        href="/signin"
-        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        Log in
-      </Link>
+      <div className="flex items-center gap-6">
+        <a
+          href="https://github.com/abhi-arya1/parallel"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          GitHub
+        </a>
+        <Link
+          href="/signin"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Log in
+        </Link>
+      </div>
     </nav>
   );
 }

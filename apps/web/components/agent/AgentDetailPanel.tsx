@@ -84,6 +84,7 @@ export function AgentDetailPanel({
           activity={activity}
           messages={messages}
           streamingText={streamingText}
+          isLoading={status === "thinking" || status === "working"}
         />
       </div>
 

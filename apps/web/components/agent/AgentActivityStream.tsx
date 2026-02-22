@@ -35,6 +35,7 @@ interface AgentActivityStreamProps {
   streamingText?: string;
   pendingCode?: string;
   isAwaitingApproval?: boolean;
+  isLoading?: boolean;
   onApprove?: () => void;
   onReject?: (feedback?: string) => void;
 }
@@ -110,6 +111,7 @@ export function AgentActivityStream({
   streamingText,
   pendingCode,
   isAwaitingApproval,
+  isLoading,
   onApprove,
   onReject,
 }: AgentActivityStreamProps) {
@@ -168,6 +170,17 @@ export function AgentActivityStream({
         <div className="relative">
           <MarkdownPreview content={streamingText} compact />
           <span className="inline-block w-1.5 h-4 bg-foreground/70 ml-0.5 animate-pulse align-middle" />
+        </div>
+      )}
+
+      {isLoading && !streamingText && (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <HugeiconsIcon
+            icon={Loading03Icon}
+            size={14}
+            className="animate-spin"
+          />
+          <span className="text-sm">Thinking...</span>
         </div>
       )}
     </div>

@@ -1,9 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -11,35 +8,28 @@ import {
   ArrowUp01Icon,
 } from "@hugeicons-pro/core-duotone-rounded";
 import { AgentStatusCard } from "./AgentStatusCard";
-import type { Agent } from "./types";
+import type { AgentRole, AgentState } from "./types";
+
+const ALL_ROLES: AgentRole[] = ["engineer", "researcher", "reviewer"];
 
 interface AgentStatusSectionProps {
-  workspaceId: Id<"workspaces">;
-  selectedAgentId: Id<"agents"> | null;
-  onSelectAgent: (agentId: Id<"agents"> | null) => void;
+  agents: Record<AgentRole, AgentState>;
+  selectedAgentRole: AgentRole | null;
+  onSelectAgent: (role: AgentRole | null) => void;
 }
 
 export function AgentStatusSection({
-  workspaceId,
-  selectedAgentId,
+  agents,
+  selectedAgentRole,
   onSelectAgent,
 }: AgentStatusSectionProps) {
   const [isExpanded, setIsExpanded] = useState(true);
-  const agents = useQuery(api.agents.listByWorkspace, { workspaceId });
 
-  const hasActiveAgents = agents?.some((a) =>
-    [
-      "spawning",
-      "thinking",
-      "working",
-      "working_hard",
-      "awaiting_approval",
-    ].includes(a.status),
+  const hasActiveAgents = ALL_ROLES.some((role) =>
+    ["spawning", "thinking", "working", "awaiting_approval"].includes(
+      agents[role].status,
+    ),
   );
-
-  if (!agents || agents.length === 0) {
-    return null;
-  }
 
   return (
     <div className="border-t border-border">
@@ -68,13 +58,14 @@ export function AgentStatusSection({
 
       {isExpanded && (
         <div className="px-2 pb-2 space-y-1">
-          {agents.map((agent) => (
+          {ALL_ROLES.map((role) => (
             <AgentStatusCard
-              key={agent._id}
-              agent={agent as Agent}
-              isSelected={selectedAgentId === agent._id}
+              key={role}
+              role={role}
+              status={agents[role].status}
+              isSelected={selectedAgentRole === role}
               onClick={() =>
-                onSelectAgent(selectedAgentId === agent._id ? null : agent._id)
+                onSelectAgent(selectedAgentRole === role ? null : role)
               }
             />
           ))}

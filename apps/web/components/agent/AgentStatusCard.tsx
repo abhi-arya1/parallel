@@ -2,28 +2,27 @@
 
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "./AgentAvatar";
-import type { Agent, AgentRole } from "./types";
+import type { AgentRole, AgentStatus } from "./types";
 import { AGENT_ROLE_CONFIG, AGENT_STATUS_CONFIG } from "./types";
 
 interface AgentStatusCardProps {
-  agent: Agent;
+  role: AgentRole;
+  status: AgentStatus;
   isSelected: boolean;
   onClick: () => void;
 }
 
 export function AgentStatusCard({
-  agent,
+  role,
+  status,
   isSelected,
   onClick,
 }: AgentStatusCardProps) {
-  const roleConfig = AGENT_ROLE_CONFIG[agent.role];
-  const statusConfig = AGENT_STATUS_CONFIG[agent.status];
-  const isActive = [
-    "thinking",
-    "working",
-    "working_hard",
-    "awaiting_approval",
-  ].includes(agent.status);
+  const roleConfig = AGENT_ROLE_CONFIG[role];
+  const statusConfig = AGENT_STATUS_CONFIG[status];
+  const isActive = ["thinking", "working", "awaiting_approval"].includes(
+    status,
+  );
 
   return (
     <button
@@ -35,17 +34,13 @@ export function AgentStatusCard({
       )}
     >
       <div className="relative flex-shrink-0">
-        <AgentAvatar
-          role={agent.role as AgentRole}
-          status={agent.status}
-          size={28}
-        />
+        <AgentAvatar role={role} status={status} size={28} />
         {isActive && (
           <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
             <span
               className={cn(
                 "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
-                agent.status === "awaiting_approval"
+                status === "awaiting_approval"
                   ? "bg-orange-400"
                   : "bg-blue-400",
               )}
@@ -53,7 +48,7 @@ export function AgentStatusCard({
             <span
               className={cn(
                 "relative inline-flex rounded-full h-2 w-2",
-                agent.status === "awaiting_approval"
+                status === "awaiting_approval"
                   ? "bg-orange-500"
                   : "bg-blue-500",
               )}
@@ -66,7 +61,7 @@ export function AgentStatusCard({
           <span className="text-sm font-medium truncate">
             {roleConfig.label}
           </span>
-          {statusConfig.label && (
+          {statusConfig.showLabel && statusConfig.label && (
             <span
               className={cn(
                 "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
@@ -78,22 +73,6 @@ export function AgentStatusCard({
             </span>
           )}
         </div>
-        {agent.error ? (
-          <p className="text-xs text-red-500 truncate mt-0.5">
-            {(() => {
-              try {
-                const parsed = JSON.parse(agent.error);
-                return parsed.message ?? agent.error;
-              } catch {
-                return agent.error;
-              }
-            })()}
-          </p>
-        ) : agent.currentTask ? (
-          <p className="text-xs text-muted-foreground truncate mt-0.5">
-            {agent.currentTask}
-          </p>
-        ) : null}
       </div>
     </button>
   );

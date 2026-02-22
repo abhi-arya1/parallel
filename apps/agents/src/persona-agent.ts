@@ -144,8 +144,8 @@ export class PersonaAgent extends Agent<Env> {
   storage: DurableObjectStorage;
   db: DrizzleSqliteDODatabase;
   connections: Set<Connection> = new Set();
-  role: AgentRole = "researcher";
-  workspaceId = "";
+  _role: AgentRole | null = null;
+  _workspaceId: string | null = null;
   abortController: AbortController | null = null;
   convex: ConvexClient | null = null;
 
@@ -154,12 +154,6 @@ export class PersonaAgent extends Agent<Env> {
     this.storage = ctx.storage;
     this.db = drizzle(this.storage, { logger: false });
 
-    const parts = this.name.split("-");
-    if (parts.length >= 2) {
-      this.role = parts[0] as AgentRole;
-      this.workspaceId = parts.slice(1).join("-");
-    }
-
     if (env.CONVEX_URL) this.convex = new ConvexClient(env.CONVEX_URL);
 
     ctx.blockConcurrencyWhile(async () => {
@@ -167,12 +161,54 @@ export class PersonaAgent extends Agent<Env> {
     });
   }
 
+  #getName(): string {
+    try {
+      return this.name;
+    } catch {
+      return "unknown";
+    }
+  }
+
+  get role(): AgentRole {
+    if (!this._role) {
+      const name = this.#getName();
+      const parts = name.split("-");
+      this._role = (parts[0] as AgentRole) || "researcher";
+    }
+    return this._role;
+  }
+
+  get workspaceId(): string {
+    if (!this._workspaceId) {
+      const name = this.#getName();
+      const parts = name.split("-");
+      this._workspaceId = parts.slice(1).join("-");
+    }
+    return this._workspaceId;
+  }
+
   async onConnect(
     connection: Connection,
     _ctx: ConnectionContext,
   ): Promise<void> {
+    console.log("onConnect called for", this.#getName());
     this.connections.add(connection);
-    await this.sendState(connection);
+    try {
+      // Send minimal state first to complete handshake
+      connection.send(
+        JSON.stringify({
+          type: "state",
+          role: this.role,
+          status: "idle",
+          autoApprove: false,
+          activity: [],
+          findings: [],
+          messages: [],
+        }),
+      );
+    } catch (error) {
+      console.error("Error in onConnect:", error);
+    }
   }
 
   async onClose(connection: Connection): Promise<void> {

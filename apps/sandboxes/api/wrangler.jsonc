@@ -39,3 +39,9 @@
     },
   },
 }
+
+// Required secrets (set via wrangler secret put):
+// - CONVEX_URL: Your Convex deployment URL
+// - INTERNAL_API_KEY: Internal API key for Convex sync
+// - MODAL_TOKEN_ID: Modal API token ID
+// - MODAL_TOKEN_SECRET: Modal API token secret

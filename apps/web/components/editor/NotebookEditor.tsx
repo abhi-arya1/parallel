@@ -79,6 +79,7 @@ export const NotebookEditor = forwardRef<
       user._id,
       user.name ?? "Anonymous",
       user.email ?? undefined,
+      user.image ?? undefined,
     );
   }, [user]);
 

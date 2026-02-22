@@ -28,7 +28,13 @@ export function AgentStatusSection({
   const agents = useQuery(api.agents.listByWorkspace, { workspaceId });
 
   const hasActiveAgents = agents?.some((a) =>
-    ["spawning", "thinking", "working", "awaiting_approval"].includes(a.status),
+    [
+      "spawning",
+      "thinking",
+      "working",
+      "working_hard",
+      "awaiting_approval",
+    ].includes(a.status),
   );
 
   if (!agents || agents.length === 0) {

@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { nanoid } from "nanoid";
 
 export const get = query({
   args: {
@@ -256,6 +257,51 @@ export const setGpu = mutation({
 
     // Return the old kernel ID so the frontend can terminate it
     return { oldKernelId };
+  },
+});
+
+export const createFromImport = mutation({
+  args: {
+    title: v.string(),
+    cells: v.array(
+      v.object({
+        type: v.union(v.literal("code"), v.literal("markdown")),
+        content: v.string(),
+        language: v.optional(v.string()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const now = Date.now();
+    const workspaceId = await ctx.db.insert("workspaces", {
+      title: args.title,
+      createdBy: userId,
+      collaborators: [],
+      lastSavedAt: now,
+    });
+
+    for (let i = 0; i < args.cells.length; i++) {
+      const cell = args.cells[i]!;
+      await ctx.db.insert("cells", {
+        workspaceId,
+        yjsCellId: nanoid(),
+        type: cell.type,
+        content: cell.content,
+        authorType: "human",
+        authorId: userId as string,
+        status: "active",
+        language:
+          cell.type === "code" ? (cell.language ?? "python") : undefined,
+        orderIndex: i,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    return workspaceId;
   },
 });
 

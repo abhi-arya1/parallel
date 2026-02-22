@@ -107,6 +107,7 @@ export interface AwarenessUser {
   name: string;
   color: string;
   email?: string;
+  image?: string;
 }
 
 // Supported code languages

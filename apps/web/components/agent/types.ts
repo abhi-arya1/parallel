@@ -6,6 +6,7 @@ export type AgentStatus =
   | "spawning"
   | "thinking"
   | "working"
+  | "working_hard"
   | "awaiting_approval"
   | "done"
   | "idle"
@@ -86,6 +87,11 @@ export const AGENT_STATUS_CONFIG: Record<
     label: "Working",
     color: "text-amber-500",
     bgColor: "bg-amber-500/10",
+  },
+  working_hard: {
+    label: "Working Hard",
+    color: "text-amber-600",
+    bgColor: "bg-amber-600/10",
   },
   awaiting_approval: {
     label: "Needs Approval",

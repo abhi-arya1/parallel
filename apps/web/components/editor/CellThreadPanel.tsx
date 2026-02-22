@@ -5,13 +5,12 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id, Doc } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
+import { Streamdown } from "streamdown";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  SentIcon,
   Delete02Icon,
   ArrowTurnBackwardIcon,
 } from "@hugeicons-pro/core-duotone-rounded";
-import { Button } from "@/components/ui/button";
 
 interface CellThreadPanelProps {
   yjsCellId: string;
@@ -19,6 +18,46 @@ interface CellThreadPanelProps {
 }
 
 type Thread = Doc<"threads">;
+
+function formatRelativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  if (hours < 24) return `${hours}h`;
+  if (days < 7) return `${days}d`;
+  return new Date(timestamp).toLocaleDateString();
+}
+
+function getStableColor(name: string): string {
+  const colors = [
+    "#E57373",
+    "#F06292",
+    "#BA68C8",
+    "#9575CD",
+    "#7986CB",
+    "#64B5F6",
+    "#4FC3F7",
+    "#4DD0E1",
+    "#4DB6AC",
+    "#81C784",
+    "#AED581",
+    "#DCE775",
+    "#FFD54F",
+    "#FFB74D",
+    "#FF8A65",
+    "#A1887F",
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length]!;
+}
 
 function getTextColorForBackground(backgroundColor: string): string {
   const hex = backgroundColor.replace("#", "");
@@ -29,40 +68,15 @@ function getTextColorForBackground(backgroundColor: string): string {
   return luminance > 0.5 ? "#000000" : "#FFFFFF";
 }
 
-function formatRelativeTime(timestamp: number): string {
-  const now = Date.now();
-  const diff = now - timestamp;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return new Date(timestamp).toLocaleDateString();
-}
-
-function getAuthorColor(authorId: string): string {
-  const colors = [
-    "#4ECDC4",
-    "#FF6B6B",
-    "#A8DADC",
-    "#FFE66D",
-    "#95E1D3",
-    "#F38181",
-    "#AA96DA",
-    "#FCBAD3",
-  ];
-  let hash = 0;
-  for (let i = 0; i < authorId.length; i++) {
-    hash = authorId.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length]!;
+interface UserInfo {
+  _id: Id<"users">;
+  name?: string;
+  image?: string;
 }
 
 interface ThreadMessageProps {
   thread: Thread;
+  userInfo?: UserInfo;
   onReply?: () => void;
   onDelete: () => void;
   isReply?: boolean;
@@ -71,71 +85,79 @@ interface ThreadMessageProps {
 
 function ThreadMessage({
   thread,
+  userInfo,
   onReply,
   onDelete,
   isReply,
   currentUserId,
 }: ThreadMessageProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const color = getAuthorColor(thread.authorId);
   const isOwn = currentUserId === thread.authorId;
+  const displayName = userInfo?.name || thread.authorName;
+  const avatarUrl = userInfo?.image;
+  const bgColor = getStableColor(displayName);
 
   return (
     <div
-      className={cn("group flex gap-2", isReply && "ml-6")}
+      className={cn("group relative flex gap-2", isReply && "ml-6 mt-2.5")}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div
-        className="size-6 flex-shrink-0 rounded-full text-[10px] font-semibold leading-6 text-center"
-        style={{
-          backgroundColor: color,
-          color: getTextColorForBackground(color),
-        }}
-      >
-        {thread.authorName.charAt(0).toUpperCase()}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium">{thread.authorName}</span>
-          <span className="text-[10px] text-muted-foreground">
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt={displayName}
+          className="size-5 flex-shrink-0 rounded-full object-cover"
+        />
+      ) : (
+        <div
+          className="size-5 flex-shrink-0 rounded-full text-[9px] font-semibold leading-5 text-center"
+          style={{
+            backgroundColor: bgColor,
+            color: getTextColorForBackground(bgColor),
+          }}
+        >
+          {displayName.charAt(0).toUpperCase()}
+        </div>
+      )}
+      <div className="min-w-0 flex-1 pt-0.5">
+        <div className="flex items-center gap-1.5 text-xs">
+          <span className="font-medium text-foreground">{displayName}</span>
+          <span className="text-muted-foreground/50">
             {formatRelativeTime(thread.createdAt)}
           </span>
           {thread.authorType === "agent" && thread.agentRole && (
-            <span className="rounded bg-muted px-1 py-0.5 text-[9px] font-medium uppercase">
+            <span className="text-[9px] uppercase text-muted-foreground/40">
               {thread.agentRole}
             </span>
           )}
         </div>
-        <p className="mt-0.5 text-sm text-foreground/90 whitespace-pre-wrap break-words">
-          {thread.content}
-        </p>
-        <div
-          className={cn(
-            "mt-1 flex items-center gap-1 transition-opacity",
-            !isHovered && "opacity-0",
-          )}
-        >
+        <div className="mt-1 text-sm text-foreground/90 prose prose-sm dark:prose-invert max-w-none [&_p]:m-0 [&_pre]:my-1.5 [&_pre]:text-xs">
+          <Streamdown>{thread.content}</Streamdown>
+        </div>
+      </div>
+      {isHovered && (
+        <div className="absolute right-0 top-0 flex items-center gap-1">
           {!isReply && onReply && (
             <button
               onClick={onReply}
-              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="Reply"
             >
-              <HugeiconsIcon icon={ArrowTurnBackwardIcon} size={10} />
-              Reply
+              <HugeiconsIcon icon={ArrowTurnBackwardIcon} size={14} />
             </button>
           )}
           {isOwn && (
             <button
               onClick={onDelete}
-              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              className="rounded p-1 text-muted-foreground/50 hover:bg-destructive/10 hover:text-destructive"
+              title="Delete"
             >
-              <HugeiconsIcon icon={Delete02Icon} size={10} />
-              Delete
+              <HugeiconsIcon icon={Delete02Icon} size={12} />
             </button>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -147,8 +169,7 @@ export function CellThreadPanel({
   const [input, setInput] = useState("");
   const [replyingTo, setReplyingTo] = useState<Id<"threads"> | null>(null);
   const [isSending, setIsSending] = useState(false);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const threads = useQuery(api.threads.listByCell, { yjsCellId });
   const createThread = useMutation(api.threads.create);
@@ -156,6 +177,33 @@ export function CellThreadPanel({
 
   const currentUser = useQuery(api.users.currentUser);
   const currentUserId = currentUser?._id;
+
+  // Get unique human author IDs to fetch user info
+  const humanAuthorIds = useMemo(() => {
+    if (!threads) return [];
+    const ids = new Set<Id<"users">>();
+    for (const thread of threads) {
+      if (thread.authorType === "human") {
+        ids.add(thread.authorId as Id<"users">);
+      }
+    }
+    return Array.from(ids);
+  }, [threads]);
+
+  const users = useQuery(
+    api.users.getByIds,
+    humanAuthorIds.length > 0 ? { userIds: humanAuthorIds } : "skip",
+  );
+
+  const userMap = useMemo(() => {
+    const map = new Map<string, UserInfo>();
+    if (users) {
+      for (const user of users) {
+        map.set(user._id, user);
+      }
+    }
+    return map;
+  }, [users]);
 
   const groupedThreads = useMemo(() => {
     if (!threads) return [];
@@ -196,8 +244,8 @@ export function CellThreadPanel({
       e.preventDefault();
       handleSubmit(e);
     }
-    if (e.key === "Escape" && replyingTo) {
-      setReplyingTo(null);
+    if (e.key === "Escape") {
+      if (replyingTo) setReplyingTo(null);
     }
   };
 
@@ -210,22 +258,20 @@ export function CellThreadPanel({
     : null;
 
   return (
-    <div
-      ref={panelRef}
-      className="border-t border-border bg-muted/30 animate-in slide-in-from-top-2 duration-200"
-    >
+    <div className="w-[80%] overflow-hidden rounded-lg border border-border/40 bg-muted/30 px-4 py-3 mt-2 mb-3 animate-in fade-in slide-in-from-top-2 duration-200">
       {threads === undefined ? (
-        <div className="flex items-center justify-center py-4">
+        <div className="flex items-center justify-center py-3">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
         </div>
       ) : (
         <>
           {groupedThreads.length > 0 && (
-            <div className="max-h-64 space-y-3 overflow-y-auto px-4 py-3">
+            <div className="max-h-64 space-y-5 overflow-y-auto mb-4">
               {groupedThreads.map(({ parent, replies }) => (
-                <div key={parent._id} className="space-y-2">
+                <div key={parent._id}>
                   <ThreadMessage
                     thread={parent}
+                    userInfo={userMap.get(parent.authorId)}
                     onReply={() => setReplyingTo(parent._id)}
                     onDelete={() => handleDelete(parent._id)}
                     currentUserId={currentUserId}
@@ -234,6 +280,7 @@ export function CellThreadPanel({
                     <ThreadMessage
                       key={reply._id}
                       thread={reply}
+                      userInfo={userMap.get(reply.authorId)}
                       onDelete={() => handleDelete(reply._id)}
                       isReply
                       currentUserId={currentUserId}
@@ -246,49 +293,40 @@ export function CellThreadPanel({
 
           <form
             onSubmit={handleSubmit}
-            className="border-t border-border/50 p-3"
+            className={cn(
+              "flex items-center gap-3",
+              groupedThreads.length > 0 && "pt-3 border-t border-border/30",
+            )}
           >
             {replyingToThread && (
-              <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-                <span>
-                  Replying to{" "}
-                  <span className="font-medium">
-                    {replyingToThread.authorName}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setReplyingTo(null)}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  ×
-                </button>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={
-                  replyingTo ? "Write a reply..." : "Add a comment..."
-                }
-                rows={1}
-                className={cn(
-                  "flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm",
-                  "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                )}
-              />
-              <Button
-                type="submit"
-                size="icon"
-                disabled={!input.trim() || isSending}
-                className="flex-shrink-0"
+              <button
+                type="button"
+                onClick={() => setReplyingTo(null)}
+                className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
               >
-                <HugeiconsIcon icon={SentIcon} size={16} />
-              </Button>
-            </div>
+                @{replyingToThread.authorName} ×
+              </button>
+            )}
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={replyingTo ? "Reply..." : "Add a comment..."}
+              className={cn(
+                "flex-1 bg-transparent text-sm outline-none py-1",
+                "placeholder:text-muted-foreground/40",
+              )}
+            />
+            {input.trim() && (
+              <button
+                type="submit"
+                disabled={isSending}
+                className="text-xs font-medium text-primary hover:text-primary/80 disabled:opacity-50"
+              >
+                {isSending ? "..." : "Send"}
+              </button>
+            )}
           </form>
         </>
       )}

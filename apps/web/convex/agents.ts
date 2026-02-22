@@ -12,6 +12,7 @@ const agentStatusValidator = v.union(
   v.literal("thinking"),
   v.literal("working"),
   v.literal("working_hard"),
+  v.literal("awaiting_approval"),
   v.literal("done"),
   v.literal("idle"),
   v.literal("error"),
@@ -512,5 +513,31 @@ export const getNewMessages = query({
       .filter((q) => q.gt(q.field("timestamp"), args.afterTimestamp))
       .order("asc")
       .collect();
+  },
+});
+
+export const continueAgent = mutation({
+  args: {
+    agentId: v.id("agents"),
+  },
+  handler: async (ctx, args) => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) throw new Error("Agent not found");
+
+    if (!["done", "idle", "error"].includes(agent.status)) {
+      return { needsContinue: false, status: agent.status };
+    }
+
+    await ctx.db.patch(args.agentId, {
+      status: "thinking",
+      completedAt: undefined,
+      error: undefined,
+    });
+
+    return {
+      needsContinue: true,
+      workspaceId: agent.workspaceId,
+      role: agent.role,
+    };
   },
 });

@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check } from "lucide-react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Copy01Icon } from "@hugeicons-pro/core-duotone-rounded";
 import { cn } from "@/lib/utils";
@@ -37,8 +36,6 @@ export function CellOutput({
   elapsedTime,
   lastRunTime,
 }: CellOutputProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
-
   // Show timer even if no outputs yet (when running)
   const hasTimer = isRunning || lastRunTime !== null;
 
@@ -55,13 +52,6 @@ export function CellOutput({
   const terminalContent = terminalOutputs
     .map((o) => ({ type: o.type, content: o.content }))
     .filter((o) => o.content.trim() !== "");
-
-  // Count total lines
-  const totalLines = terminalContent.reduce(
-    (acc, o) => acc + o.content.split("\n").length,
-    0,
-  );
-  const shouldTruncate = totalLines > 30;
 
   // Copy all text outputs to clipboard
   const handleCopy = () => {
@@ -122,30 +112,10 @@ export function CellOutput({
 
       {/* Terminal output area */}
       {terminalContent.length > 0 && (
-        <div
-          className={cn(
-            "overflow-y-auto px-4 py-2 font-mono text-[11px] leading-normal",
-            shouldTruncate && !isExpanded && "max-h-[300px]",
-          )}
-        >
+        <div className="max-h-[1000px] overflow-y-auto px-4 py-2 font-mono text-[11px] leading-normal">
           {terminalContent.map((output, index) => (
             <TerminalLine key={index} output={output} />
           ))}
-
-          {shouldTruncate && (
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <ChevronDown
-                className={cn(
-                  "h-3 w-3 transition-transform",
-                  isExpanded && "rotate-180",
-                )}
-              />
-              {isExpanded ? "Show less" : `Show all ${totalLines} lines`}
-            </button>
-          )}
         </div>
       )}
 

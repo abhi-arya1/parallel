@@ -4,7 +4,8 @@ import {
   type WorkflowStep,
 } from "cloudflare:workers";
 import { gateway } from "@ai-sdk/gateway";
-import { generateText } from "ai";
+import { generateText, tool } from "ai";
+import { z } from "zod";
 import {
   ENGINEER_SYSTEM_PROMPT,
   RESEARCHER_SYSTEM_PROMPT,
@@ -24,6 +25,8 @@ export type HypothesisWorkflowParams = {
   syncServerUrl?: string;
   sandboxUrl?: string;
   parallelApiKey?: string;
+  continueAgentId?: string;
+  continueRole?: "engineer" | "researcher" | "reviewer";
 };
 
 type AgentRole = "engineer" | "researcher" | "reviewer";
@@ -37,6 +40,7 @@ interface AgentContext {
   agentId: string;
   hypothesis: string;
   notebookContext?: string;
+  lastMessageTimestamp: number;
 }
 
 const ROLE_CONFIG = {
@@ -185,6 +189,20 @@ class ConvexClient {
       autoApprove?: boolean;
     }>;
   }
+
+  async getNewMessages(
+    agentId: string,
+    afterTimestamp: number,
+  ): Promise<Array<{ role: string; content: string; timestamp: number }>> {
+    return this.query("agents:getNewMessages", {
+      agentId,
+      afterTimestamp,
+    }) as Promise<Array<{ role: string; content: string; timestamp: number }>>;
+  }
+
+  async addAssistantMessage(agentId: string, content: string) {
+    return this.mutation("agents:addAssistantMessage", { agentId, content });
+  }
 }
 
 async function getNotebookContext(
@@ -296,6 +314,31 @@ async function waitForApproval(
   return { approved: false, feedback: "Approval timeout" };
 }
 
+async function checkForSteeringMessages(
+  client: ConvexClient,
+  ctx: AgentContext,
+): Promise<{ messages: string[]; newTimestamp: number }> {
+  try {
+    const newMessages = await client.getNewMessages(
+      ctx.agentId,
+      ctx.lastMessageTimestamp,
+    );
+    const userMessages = newMessages
+      .filter((m) => m.role === "user")
+      .map((m) => m.content);
+
+    const newTimestamp =
+      newMessages.length > 0
+        ? Math.max(...newMessages.map((m) => m.timestamp))
+        : ctx.lastMessageTimestamp;
+
+    return { messages: userMessages, newTimestamp };
+  } catch (error) {
+    console.error("[checkForSteeringMessages] Error:", formatError(error));
+    return { messages: [], newTimestamp: ctx.lastMessageTimestamp };
+  }
+}
+
 async function callLLM(
   systemPrompt: string,
   userPrompt: string,
@@ -352,13 +395,36 @@ async function runEngineer(ctx: AgentContext, client: ConvexClient) {
     content: config.activityMessages.start,
   });
 
+  const { messages: steeringMessages, newTimestamp } =
+    await checkForSteeringMessages(client, ctx);
+  ctx.lastMessageTimestamp = newTimestamp;
+
+  const isContinuation = !ctx.hypothesis && steeringMessages.length > 0;
+  const steeringContext =
+    steeringMessages.length > 0
+      ? `\n\nUser guidance:\n${steeringMessages.join("\n")}`
+      : "";
+
+  if (steeringMessages.length > 0) {
+    await client.addAssistantMessage(
+      ctx.agentId,
+      isContinuation
+        ? "Continuing with your request..."
+        : "Got it, incorporating your guidance into my analysis.",
+    );
+  }
+
   const contextPrompt = ctx.notebookContext
     ? `\n\nCurrent notebook context:\n${ctx.notebookContext}`
     : "";
 
+  const basePrompt = isContinuation
+    ? `Continue based on user request:\n${steeringMessages.join("\n")}${contextPrompt}`
+    : `Hypothesis: ${ctx.hypothesis}${contextPrompt}${steeringContext}\n\nDesign a minimal experiment with a parameter sweep (max 4 combinations). Output your analysis and Python code to run.`;
+
   const designText = await callLLM(
     config.systemPrompt,
-    `Hypothesis: ${ctx.hypothesis}${contextPrompt}\n\nDesign a minimal experiment with a parameter sweep (max 4 combinations). Output your analysis and Python code to run.`,
+    basePrompt,
     config.maxTokens,
     "engineer",
   );
@@ -438,13 +504,135 @@ async function runEngineer(ctx: AgentContext, client: ConvexClient) {
   return { success: true, text: designText };
 }
 
-async function runSimpleAgent(
-  role: "researcher" | "reviewer",
+const PARALLEL_API_URL = "https://api.parallel.ai";
+
+const searchWebSchema = z.object({
+  objective: z.string().describe("What you're trying to find or learn"),
+  queries: z
+    .array(z.string())
+    .max(5)
+    .optional()
+    .describe("Specific search queries (1-6 words each)"),
+  maxResults: z.number().min(1).max(20).default(10),
+});
+
+const searchArxivSchema = z.object({
+  query: z.string().describe("Search query for academic papers"),
+  maxResults: z.number().min(1).max(10).default(5),
+});
+
+const bashSchema = z.object({
+  command: z.string().describe("Bash command to execute"),
+});
+
+function createSearchTools(apiKey: string | undefined) {
+  if (!apiKey) {
+    return undefined;
+  }
+
+  return {
+    searchWeb: tool({
+      description:
+        "Search the web for information. Returns relevant results with titles, URLs, and snippets.",
+      parameters: searchWebSchema,
+      execute: async (args: z.infer<typeof searchWebSchema>) => {
+        const response = await fetch(`${PARALLEL_API_URL}/v1/search`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            mode: "agentic",
+            objective: args.objective,
+            search_queries: args.queries,
+            max_results: args.maxResults,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Search failed: ${response.statusText}`);
+        }
+
+        return response.json() as Promise<unknown>;
+      },
+    }),
+    searchArxiv: tool({
+      description:
+        "Search arXiv for academic papers and preprints. Returns paper titles, authors, abstracts, and URLs.",
+      parameters: searchArxivSchema,
+      execute: async (args: z.infer<typeof searchArxivSchema>) => {
+        const response = await fetch(`${PARALLEL_API_URL}/v1/search`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            mode: "agentic",
+            objective: `Find academic papers about: ${args.query}`,
+            search_queries: [args.query],
+            max_results: args.maxResults,
+            site_filter: ["arxiv.org"],
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`arXiv search failed: ${response.statusText}`);
+        }
+
+        return response.json() as Promise<unknown>;
+      },
+    }),
+  };
+}
+
+function createBashTool(sandboxUrl: string | undefined, workspaceId: string) {
+  if (!sandboxUrl) {
+    return undefined;
+  }
+
+  return {
+    executeBash: tool({
+      description:
+        "Execute a bash command in the sandbox. Use for file operations, installing packages, or running CLI tools.",
+      parameters: bashSchema,
+      execute: async (args: z.infer<typeof bashSchema>) => {
+        const response = await fetch(`${sandboxUrl}/bash`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            command: args.command,
+            agent_mode: true,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.text();
+          return { success: false, error };
+        }
+
+        const result = (await response.json()) as {
+          success: boolean;
+          stdout: string;
+          stderr: string;
+          exit_code: number;
+          error?: string;
+        };
+        return result;
+      },
+    }),
+  };
+}
+
+async function runResearcher(
   ctx: AgentContext,
   client: ConvexClient,
+  parallelApiKey: string | undefined,
 ) {
-  const config = ROLE_CONFIG[role];
-  console.log(`[runSimpleAgent:${role}] Starting for agent:`, ctx.agentId);
+  const config = ROLE_CONFIG.researcher;
+  console.log("[runResearcher] Starting for agent:", ctx.agentId);
 
   await client.updateStatus(
     ctx.agentId,
@@ -455,15 +643,116 @@ async function runSimpleAgent(
     content: config.activityMessages.start,
   });
 
+  const { messages: steeringMessages, newTimestamp } =
+    await checkForSteeringMessages(client, ctx);
+  ctx.lastMessageTimestamp = newTimestamp;
+
+  const isContinuation = !ctx.hypothesis && steeringMessages.length > 0;
+  const steeringContext =
+    steeringMessages.length > 0
+      ? `\n\nUser guidance:\n${steeringMessages.join("\n")}`
+      : "";
+
+  if (steeringMessages.length > 0) {
+    await client.addAssistantMessage(
+      ctx.agentId,
+      isContinuation
+        ? "Continuing with your request..."
+        : "Understood, taking your guidance into account.",
+    );
+  }
+
   const contextPrompt = ctx.notebookContext
     ? `\n\nCurrent notebook context:\n${ctx.notebookContext}`
     : "";
 
+  const basePrompt = isContinuation
+    ? `Continue based on user request:\n${steeringMessages.join("\n")}${contextPrompt}`
+    : `Hypothesis: ${ctx.hypothesis}${contextPrompt}${steeringContext}`;
+
+  const searchTools = createSearchTools(parallelApiKey);
+
+  const result = await generateText({
+    model: gateway("anthropic/claude-sonnet-4-20250514"),
+    system: config.systemPrompt,
+    prompt: basePrompt,
+    maxOutputTokens: config.maxTokens,
+    tools: searchTools,
+    maxSteps: 5,
+    onStepFinish: async (step) => {
+      for (const call of step.toolCalls) {
+        await client.postActivity(ctx.agentId, "tool-call", {
+          toolName: call.toolName,
+          input: call.args,
+        });
+      }
+      for (const result of step.toolResults) {
+        await client.postActivity(ctx.agentId, "tool-result", {
+          toolName: result.toolName,
+          output: result.result,
+        });
+      }
+    },
+  });
+
+  const resultText = result.text;
+
+  await client.postActivity(ctx.agentId, "thinking", {
+    content: config.activityMessages.analyze,
+  });
+  await client.postActivity(ctx.agentId, "finding-preview", {
+    markdown: resultText,
+  });
+  await client.createFinding(ctx.agentId, resultText);
+
+  return { success: true, text: resultText };
+}
+
+async function runReviewer(ctx: AgentContext, client: ConvexClient) {
+  const config = ROLE_CONFIG.reviewer;
+  console.log("[runReviewer] Starting for agent:", ctx.agentId);
+
+  await client.updateStatus(
+    ctx.agentId,
+    "thinking",
+    config.activityMessages.start,
+  );
+  await client.postActivity(ctx.agentId, "thinking", {
+    content: config.activityMessages.start,
+  });
+
+  const { messages: steeringMessages, newTimestamp } =
+    await checkForSteeringMessages(client, ctx);
+  ctx.lastMessageTimestamp = newTimestamp;
+
+  const isContinuation = !ctx.hypothesis && steeringMessages.length > 0;
+  const steeringContext =
+    steeringMessages.length > 0
+      ? `\n\nUser guidance:\n${steeringMessages.join("\n")}`
+      : "";
+
+  if (steeringMessages.length > 0) {
+    await client.addAssistantMessage(
+      ctx.agentId,
+      isContinuation
+        ? "Continuing with your request..."
+        : "Understood, taking your guidance into account.",
+    );
+  }
+
+  const contextPrompt = ctx.notebookContext
+    ? `\n\nCurrent notebook context:\n${ctx.notebookContext}`
+    : "";
+
+  const basePrompt = isContinuation
+    ? `Continue based on user request:\n${steeringMessages.join("\n")}${contextPrompt}`
+    : `Hypothesis: ${ctx.hypothesis}${contextPrompt}${steeringContext}`;
+
   const resultText = await callLLM(
     config.systemPrompt,
-    `Hypothesis: ${ctx.hypothesis}${contextPrompt}`,
+    basePrompt,
     config.maxTokens,
-    role,
+    "reviewer",
   );
 
   await client.postActivity(ctx.agentId, "thinking", {
@@ -492,9 +781,14 @@ export class HypothesisWorkflow extends WorkflowEntrypoint<
       syncKey,
       syncServerUrl,
       sandboxUrl,
+      continueAgentId,
+      continueRole,
     } = event.payload;
 
+    const isContinue = !!continueAgentId && !!continueRole;
+
     console.log("[HypothesisWorkflow] Starting workflow");
+    console.log("[HypothesisWorkflow] isContinue:", isContinue);
     console.log("[HypothesisWorkflow] convexUrl:", convexUrl);
     console.log("[HypothesisWorkflow] syncServerUrl:", syncServerUrl);
     console.log("[HypothesisWorkflow] sandboxUrl:", sandboxUrl);
@@ -510,9 +804,13 @@ export class HypothesisWorkflow extends WorkflowEntrypoint<
       },
     );
 
-    const runAgent = async (role: AgentRole) => {
+    const runAgent = async (role: AgentRole, isContinuation = false) => {
       const agentId = agentIds[role];
-      console.log(`[HypothesisWorkflow] Running agent ${role}, id: ${agentId}`);
+      if (!agentId) return { role, success: false, error: "No agent ID" };
+
+      console.log(
+        `[HypothesisWorkflow] Running agent ${role}, id: ${agentId}, continue: ${isContinuation}`,
+      );
 
       const ctx: AgentContext = {
         convexUrl,
@@ -521,8 +819,9 @@ export class HypothesisWorkflow extends WorkflowEntrypoint<
         sandboxUrl,
         workspaceId: event.payload.workspaceId,
         agentId,
-        hypothesis,
+        hypothesis: isContinuation ? "" : hypothesis,
         notebookContext,
+        lastMessageTimestamp: isContinuation ? 0 : Date.now(),
       };
 
       try {
@@ -559,6 +858,16 @@ export class HypothesisWorkflow extends WorkflowEntrypoint<
         return { role, success: false, error: errorMsg };
       }
     };
+
+    if (isContinue && continueRole) {
+      const result = await step.do(
+        `continue-${continueRole}`,
+        { timeout: ROLE_CONFIG[continueRole].timeout },
+        () => runAgent(continueRole, true),
+      );
+      console.log("[HypothesisWorkflow] Continue completed");
+      return [result];
+    }
 
     const results = await Promise.allSettled([
       step.do("engineer", { timeout: ROLE_CONFIG.engineer.timeout }, () =>

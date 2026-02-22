@@ -32,8 +32,17 @@ export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
 
   if (!agent) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+      <div className="flex flex-col h-full">
+        <header className="flex items-center justify-end px-4 py-3 border-b border-border">
+          {onClose && (
+            <Button variant="ghost" size="icon-xs" onClick={onClose}>
+              <HugeiconsIcon icon={Cancel01Icon} size={16} />
+            </Button>
+          )}
+        </header>
+        <div className="flex flex-1 items-center justify-center">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+        </div>
       </div>
     );
   }
@@ -77,7 +86,7 @@ export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
       </div>
 
       <div className="border-t border-border">
-        <AgentChat agentId={agentId} />
+        <AgentChat agentId={agentId} workspaceId={agent.workspaceId} />
       </div>
     </div>
   );

@@ -61,6 +61,53 @@ GPU_TYPES = [
     "B200",
 ]
 
+import re
+
+def preprocess_ipython_magics(code: str) -> str:
+    """
+    Transform IPython magic commands into valid Python code.
+    
+    Supports:
+    - !command  -> subprocess shell execution
+    - %pip install pkg -> subprocess pip
+    - %cd path -> os.chdir
+    - Other % magics are commented out with a warning
+    """
+    lines = code.split('\n')
+    result = []
+    
+    for line in lines:
+        stripped = line.lstrip()
+        indent = line[:len(line) - len(stripped)]
+        
+        if stripped.startswith('!'):
+            cmd = stripped[1:]
+            result.append(f'{indent}import subprocess; subprocess.run({repr(cmd)}, shell=True)')
+        elif stripped.startswith('%%'):
+            result.append(f'{indent}# Cell magic not supported: {stripped}')
+        elif stripped.startswith('%pip ') or stripped.startswith('%pip\t'):
+            args = stripped[5:].strip()
+            result.append(f'{indent}import subprocess; subprocess.run(["pip", {", ".join(repr(a) for a in args.split())}])')
+        elif stripped.startswith('%conda '):
+            args = stripped[7:].strip()
+            result.append(f'{indent}import subprocess; subprocess.run(["conda", {", ".join(repr(a) for a in args.split())}])')
+        elif stripped.startswith('%cd '):
+            path = stripped[4:].strip()
+            result.append(f'{indent}import os; os.chdir({repr(path)})')
+        elif stripped.startswith('%env '):
+            env_expr = stripped[5:].strip()
+            if '=' in env_expr:
+                key, val = env_expr.split('=', 1)
+                result.append(f'{indent}import os; os.environ[{repr(key.strip())}] = {repr(val.strip())}')
+            else:
+                result.append(f'{indent}import os; print(os.environ.get({repr(env_expr)}, ""))')
+        elif stripped.startswith('%'):
+            result.append(f'{indent}# Line magic not supported: {stripped}')
+        else:
+            result.append(line)
+    
+    return '\n'.join(result)
+
 convex_client: Optional[ConvexClient] = None
 
 
@@ -337,6 +384,9 @@ async def execute_on_kernel(
     communication.
     """
     logger.info(f"Executing cell {yjs_cell_id[:8]}... on sandbox {sandbox_id[:16]}...")
+    
+    # Preprocess IPython magic commands
+    code = preprocess_ipython_magics(code)
     logger.debug(f"Code to execute:\n{code[:200]}{'...' if len(code) > 200 else ''}")
     
     # Get the sandbox
@@ -552,6 +602,9 @@ async def stream_execute_on_kernel(
     - {"type": "done"} - Execution complete
     """
     logger.info(f"Streaming execution for cell {yjs_cell_id[:8]}... on sandbox {sandbox_id[:16]}...")
+    
+    # Preprocess IPython magic commands
+    code = preprocess_ipython_magics(code)
     
     sb = await modal.Sandbox.from_id.aio(sandbox_id)
     
@@ -1149,6 +1202,59 @@ async def stream_execute_cell(workspace_id: str, cell_id: str):
             "X-Accel-Buffering": "no",  # Disable nginx buffering
         }
     )
+
+
+class BashExecuteRequest(BaseModel):
+    workspace_id: str
+    command: str
+    agent_mode: bool = False
+
+
+class BashExecuteResponse(BaseModel):
+    success: bool
+    stdout: str = ""
+    stderr: str = ""
+    exit_code: int = 0
+    error: Optional[str] = None
+
+
+@app.post("/bash")
+async def execute_bash(request: BashExecuteRequest) -> BashExecuteResponse:
+    """Execute a bash command in the workspace sandbox."""
+    try:
+        workspace_id = request.workspace_id
+        gpu = get_workspace_gpu(workspace_id)
+        sandbox_id = await ensure_sandbox(workspace_id, gpu)
+        
+        sb = await modal.Sandbox.from_id.aio(sandbox_id)
+        
+        process = await sb.exec.aio("bash", "-c", request.command)
+        
+        stdout_lines = []
+        stderr_lines = []
+        
+        async for line in process.stdout:
+            stdout_lines.append(line)
+        
+        async for line in process.stderr:
+            stderr_lines.append(line)
+        
+        exit_code = await process.wait.aio()
+        
+        return BashExecuteResponse(
+            success=exit_code == 0,
+            stdout="".join(stdout_lines),
+            stderr="".join(stderr_lines),
+            exit_code=exit_code,
+        )
+        
+    except Exception as e:
+        logger.exception(f"Bash execution error: {e}")
+        return BashExecuteResponse(
+            success=False,
+            error=str(e),
+            exit_code=-1,
+        )
 
 
 if __name__ == "__main__":

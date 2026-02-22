@@ -397,3 +397,38 @@ export const getCellOutputs = query({
       .collect();
   },
 });
+
+/**
+ * Get all threads for a workspace (used by sync server for markdown export).
+ * Validates via INTERNAL_API_KEY — no user auth required.
+ */
+export const getThreads = query({
+  args: {
+    syncKey: v.string(),
+    workspaceId: v.id("workspaces"),
+  },
+  handler: async (ctx, args) => {
+    const expectedKey = process.env.INTERNAL_API_KEY;
+    if (!expectedKey || args.syncKey !== expectedKey) {
+      throw new Error("Invalid sync key");
+    }
+
+    const cells = await ctx.db
+      .query("cells")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+
+    const cellIds = new Set(cells.map((c) => c._id));
+    const allThreads = [];
+
+    for (const cell of cells) {
+      const threads = await ctx.db
+        .query("threads")
+        .withIndex("by_yjs_cell", (q) => q.eq("yjsCellId", cell.yjsCellId))
+        .collect();
+      allThreads.push(...threads);
+    }
+
+    return allThreads.sort((a, b) => a.createdAt - b.createdAt);
+  },
+});

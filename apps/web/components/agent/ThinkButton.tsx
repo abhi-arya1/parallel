@@ -28,7 +28,13 @@ export function ThinkButton({ workspaceId, className }: ThinkButtonProps) {
   const existingAgents = useQuery(api.agents.listByWorkspace, { workspaceId });
 
   const hasActiveAgents = existingAgents?.some((a) =>
-    ["spawning", "thinking", "working", "awaiting_approval"].includes(a.status),
+    [
+      "spawning",
+      "thinking",
+      "working",
+      "working_hard",
+      "awaiting_approval",
+    ].includes(a.status),
   );
 
   const handleSubmit = async () => {

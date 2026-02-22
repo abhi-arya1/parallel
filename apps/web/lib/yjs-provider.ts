@@ -73,22 +73,32 @@ export function subscribeToAwareness(
 }
 
 /**
- * Generate a random color for a user
+ * Generate a stable color based on a string (name)
  */
-export function generateUserColor(): string {
+export function getStableColor(name: string): string {
   const colors = [
-    "#F87171", // red
-    "#FB923C", // orange
-    "#FBBF24", // amber
-    "#A3E635", // lime
-    "#4ADE80", // green
-    "#2DD4BF", // teal
-    "#22D3EE", // cyan
-    "#60A5FA", // blue
-    "#A78BFA", // violet
-    "#F472B6", // pink
+    "#E57373",
+    "#F06292",
+    "#BA68C8",
+    "#9575CD",
+    "#7986CB",
+    "#64B5F6",
+    "#4FC3F7",
+    "#4DD0E1",
+    "#4DB6AC",
+    "#81C784",
+    "#AED581",
+    "#DCE775",
+    "#FFD54F",
+    "#FFB74D",
+    "#FF8A65",
+    "#A1887F",
   ];
-  return colors[Math.floor(Math.random() * colors.length)] ?? "#60A5FA";
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length]!;
 }
 
 /**
@@ -98,11 +108,13 @@ export function createAwarenessUser(
   id: string,
   name: string,
   email?: string,
+  image?: string,
 ): AwarenessUser {
   return {
     id,
     name,
     email,
-    color: generateUserColor(),
+    image,
+    color: getStableColor(name),
   };
 }

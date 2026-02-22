@@ -22,6 +22,8 @@ export function CellThreadToggle({
   const count = useQuery(api.threads.getCount, { yjsCellId }) ?? 0;
   const hasThreads = count > 0;
 
+  if (!hasThreads && !isHovered && !isExpanded) return null;
+
   return (
     <button
       onClick={(e) => {
@@ -29,21 +31,16 @@ export function CellThreadToggle({
         onToggle();
       }}
       className={cn(
-        "relative rounded p-1 text-muted-foreground transition-all duration-150",
-        "hover:bg-muted hover:text-foreground",
-        isExpanded && "bg-muted text-foreground",
-        !hasThreads && !isHovered && !isExpanded && "opacity-0",
+        "flex items-center gap-0.5 text-muted-foreground transition-colors",
+        "hover:text-foreground",
+        isExpanded && "text-foreground",
       )}
       title={
-        hasThreads ? `${count} comment${count !== 1 ? "s" : ""}` : "Add comment"
+        hasThreads ? `${count} comment${count !== 1 ? "s" : ""}` : "Comment"
       }
     >
       <HugeiconsIcon icon={Comment01Icon} size={14} />
-      {hasThreads && (
-        <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-medium text-primary-foreground">
-          {count > 99 ? "99+" : count}
-        </span>
-      )}
+      {hasThreads && <span className="text-[10px] tabular-nums">{count}</span>}
     </button>
   );
 }

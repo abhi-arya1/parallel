@@ -175,15 +175,23 @@ export function CellShell({
             <div className="flex flex-col items-center -space-y-1.5">
               {usersInCell.slice(0, 3).map((user) => (
                 <div key={user.clientId} className="group/avatar relative">
-                  <div
-                    className="size-5 rounded-full text-[8px] font-semibold leading-5 text-center"
-                    style={{
-                      backgroundColor: user.color,
-                      color: getTextColorForBackground(user.color),
-                    }}
-                  >
-                    {user.name.charAt(0).toUpperCase()}
-                  </div>
+                  {user.image ? (
+                    <img
+                      src={user.image}
+                      alt={user.name}
+                      className="size-5 rounded-full object-cover ring-2 ring-background"
+                    />
+                  ) : (
+                    <div
+                      className="size-5 rounded-full text-[8px] font-semibold leading-5 text-center ring-2 ring-background"
+                      style={{
+                        backgroundColor: user.color,
+                        color: getTextColorForBackground(user.color),
+                      }}
+                    >
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   <div
                     className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium opacity-0 transition-opacity group-hover/avatar:opacity-100"
                     style={{
@@ -292,7 +300,9 @@ export function CellShell({
 
       {/* Thread panel - shown below cell when expanded */}
       {isThreadExpanded && (
-        <CellThreadPanel yjsCellId={cellId} workspaceId={workspaceId} />
+        <div className="ml-4 mr-10">
+          <CellThreadPanel yjsCellId={cellId} workspaceId={workspaceId} />
+        </div>
       )}
     </div>
   );

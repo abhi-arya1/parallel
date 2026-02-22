@@ -384,10 +384,39 @@ export class Document extends YServer {
   /**
    * Convert the notebook to markdown format for agent context
    */
-  private toMarkdown(): string {
+  private async toMarkdown(): Promise<string> {
     const cellOrder = this.document.getArray<string>("cellOrder");
     const cellDataMap = this.document.getMap<Y.Map<unknown>>("cellData");
     const orderedIds = cellOrder.toArray();
+
+    // Fetch threads from Convex
+    const threadsByCell = new Map<
+      string,
+      Array<{ authorName: string; content: string; parentThreadId?: string }>
+    >();
+    const client = this.getConvexClient();
+    const workspaceId = this.getWorkspaceId();
+    const syncKey = this.env.INTERNAL_API_KEY;
+
+    if (client && workspaceId && syncKey) {
+      try {
+        const threads = await client.query(anyApi.sync.getThreads, {
+          syncKey,
+          workspaceId,
+        });
+        for (const thread of threads) {
+          const cellThreads = threadsByCell.get(thread.yjsCellId) || [];
+          cellThreads.push({
+            authorName: thread.authorName,
+            content: thread.content,
+            parentThreadId: thread.parentThreadId,
+          });
+          threadsByCell.set(thread.yjsCellId, cellThreads);
+        }
+      } catch (error) {
+        console.warn("[Document] Failed to fetch threads for markdown:", error);
+      }
+    }
 
     const sections: string[] = [];
 
@@ -416,6 +445,23 @@ export class Document extends YServer {
           sections.push(`> **${agentRole}**: ${contentStr}`);
         } else {
           sections.push(contentStr);
+        }
+      }
+
+      // Add threads for this cell
+      const cellThreads = threadsByCell.get(cellId);
+      if (cellThreads && cellThreads.length > 0) {
+        const topLevel = cellThreads.filter((t) => !t.parentThreadId);
+        const threadLines: string[] = [];
+        for (const thread of topLevel) {
+          threadLines.push(`> **${thread.authorName}**: ${thread.content}`);
+          const replies = cellThreads.filter((t) => t.parentThreadId);
+          for (const reply of replies) {
+            threadLines.push(`> > ↳ **${reply.authorName}**: ${reply.content}`);
+          }
+        }
+        if (threadLines.length > 0) {
+          sections.push(threadLines.join("\n"));
         }
       }
     }
@@ -451,7 +497,7 @@ export class Document extends YServer {
 
     if (request.method === "GET") {
       if (url.pathname.endsWith("/markdown")) {
-        const markdown = this.toMarkdown();
+        const markdown = await this.toMarkdown();
         return new Response(JSON.stringify({ ok: true, markdown }), {
           status: 200,
           headers: { "Content-Type": "application/json" },

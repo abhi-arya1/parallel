@@ -32,3 +32,26 @@ export async function triggerHypothesisWorkflow(
 
   return response.json();
 }
+
+export async function triggerAgentContinue(
+  workspaceId: Id<"workspaces">,
+  agentId: string,
+  role: AgentRole,
+): Promise<{ instanceId: string }> {
+  const response = await fetch(`${AGENTS_URL}/continue`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      workspaceId,
+      agentId,
+      role,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to continue agent: ${error}`);
+  }
+
+  return response.json();
+}

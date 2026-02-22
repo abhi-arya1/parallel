@@ -1,20 +1,9 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import {
-  TestTube01Icon,
-  Book01Icon,
-  JusticeScale01Icon,
-} from "@hugeicons-pro/core-duotone-rounded";
+import { AgentAvatar } from "./AgentAvatar";
 import type { Agent, AgentRole } from "./types";
 import { AGENT_ROLE_CONFIG, AGENT_STATUS_CONFIG } from "./types";
-
-const ROLE_ICONS: Record<AgentRole, IconSvgElement> = {
-  engineer: TestTube01Icon,
-  researcher: Book01Icon,
-  reviewer: JusticeScale01Icon,
-};
 
 interface AgentStatusCardProps {
   agent: Agent;
@@ -29,10 +18,12 @@ export function AgentStatusCard({
 }: AgentStatusCardProps) {
   const roleConfig = AGENT_ROLE_CONFIG[agent.role];
   const statusConfig = AGENT_STATUS_CONFIG[agent.status];
-  const Icon = ROLE_ICONS[agent.role];
-  const isActive = ["thinking", "working", "awaiting_approval"].includes(
-    agent.status,
-  );
+  const isActive = [
+    "thinking",
+    "working",
+    "working_hard",
+    "awaiting_approval",
+  ].includes(agent.status);
 
   return (
     <button
@@ -43,12 +34,16 @@ export function AgentStatusCard({
         isSelected && "bg-accent",
       )}
     >
-      <div className={cn("relative flex-shrink-0", roleConfig.color)}>
-        <HugeiconsIcon icon={Icon} size={20} />
+      <div className="relative flex-shrink-0">
+        <AgentAvatar
+          role={agent.role as AgentRole}
+          status={agent.status}
+          size={28}
+        />
         {isActive && (
           <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-current" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
           </span>
         )}
       </div>

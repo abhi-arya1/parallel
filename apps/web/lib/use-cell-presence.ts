@@ -7,6 +7,7 @@ export interface CellPresenceUser {
   id: string;
   name: string;
   color: string;
+  image?: string;
   clientId: number;
 }
 
@@ -36,6 +37,7 @@ export function useCellPresence(
               id?: string;
               name?: string;
               color?: string;
+              image?: string;
             }
           | undefined;
         const focusedCell = state.focusedCell as string | undefined;
@@ -46,6 +48,7 @@ export function useCellPresence(
             id: user.id || String(clientId),
             name: user.name,
             color: user.color,
+            image: user.image,
             clientId,
           });
         }

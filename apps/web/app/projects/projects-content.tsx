@@ -15,9 +15,11 @@ import {
   Search01Icon,
   Add01Icon,
 } from "@hugeicons-pro/core-duotone-rounded";
+import Image from "next/image";
 import { ProjectCard } from "@/components/project-card";
 import { ProjectRow } from "@/components/project-row";
 import { DeleteProjectDialog } from "@/components/delete-project-dialog";
+import { ImportNotebookDialog } from "@/components/import-notebook-dialog";
 
 export function ProjectsContent({
   preloadedWorkspaces,
@@ -37,6 +39,7 @@ export function ProjectsContent({
     title: string;
   } | null>(null);
   const [renamingId, setRenamingId] = useState<Id<"workspaces"> | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const filtered = workspaces?.filter((w) =>
     w.title.toLowerCase().includes(search.toLowerCase()),
@@ -79,6 +82,12 @@ export function ProjectsContent({
               className="pl-8 w-52"
             />
           </div>
+
+          {/* Import */}
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Image src="/jupyter.png" alt="Jupyter" width={16} height={16} />
+            Import Notebook
+          </Button>
 
           {/* Create */}
           <Button
@@ -162,6 +171,8 @@ export function ProjectsContent({
           }
         }}
       />
+
+      <ImportNotebookDialog open={importOpen} onOpenChange={setImportOpen} />
     </div>
   );
 }

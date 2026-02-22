@@ -15,6 +15,7 @@ import { smoothStream, streamText, stepCountIs, tool, ToolSet } from "ai";
 import { gateway } from "@ai-sdk/gateway";
 import { nanoid } from "nanoid";
 import { z } from "zod";
+import { Parallel } from "parallel-web";
 import {
   activityTable,
   findingsTable,
@@ -77,14 +78,84 @@ type Message = {
   timestamp: number;
 };
 
+const MAX_SEARCH_QUERIES = 5;
+
 const searchWebInputSchema = z.object({
-  query: z.string().describe("Search query"),
+  objective: z
+    .string()
+    .describe("Natural-language description of what the web research goal is."),
+  queries: z
+    .array(z.string())
+    .max(MAX_SEARCH_QUERIES)
+    .optional()
+    .describe(
+      `List of keyword search queries of 1-6 words. Maximum ${MAX_SEARCH_QUERIES} queries.`,
+    ),
+  maxResults: z.number().min(1).max(20).default(10),
 });
 
 const searchArxivInputSchema = z.object({
   query: z.string().describe("Search query for academic papers"),
-  maxResults: z.number().optional().describe("Maximum number of results"),
+  maxResults: z.number().min(1).max(10).default(5),
 });
+
+type ExtractType = "focused" | "detailed" | "full_page";
+
+const extractInputSchema = z.object({
+  objective: z
+    .string()
+    .describe(
+      "Natural-language description of what information you're looking for from the URLs.",
+    ),
+  urls: z
+    .array(z.string())
+    .max(10)
+    .describe("List of URLs to extract content from. Maximum 10 URLs."),
+  queries: z
+    .array(z.string())
+    .max(MAX_SEARCH_QUERIES)
+    .optional()
+    .describe(
+      `Optional keyword queries to emphasize specific terms. Maximum ${MAX_SEARCH_QUERIES} queries.`,
+    ),
+  extractType: z
+    .enum(["focused", "detailed", "full_page"])
+    .optional()
+    .default("focused")
+    .describe(
+      "Controls extraction depth. 'focused' for quick relevant excerpts (default), 'detailed' for comprehensive excerpts, 'full_page' for complete page content.",
+    ),
+  freshness: z
+    .enum(["cached", "fresh"])
+    .optional()
+    .default("cached")
+    .describe(
+      "Content freshness. 'cached' for fast indexed content (default), 'fresh' to fetch live content.",
+    ),
+});
+
+function getExtractSettings(extractType: ExtractType): {
+  excerpts: boolean | { max_chars_per_result: number };
+  full_content: boolean | { max_chars_per_result: number };
+} {
+  switch (extractType) {
+    case "focused":
+      return {
+        excerpts: { max_chars_per_result: 5000 },
+        full_content: false,
+      };
+    case "detailed":
+      return {
+        excerpts: { max_chars_per_result: 15000 },
+        full_content: false,
+      };
+    case "full_page":
+      return {
+        excerpts: false,
+        full_content: { max_chars_per_result: 30000 },
+      };
+  }
+}
 
 const executeCodeInputSchema = z.object({
   code: z.string().describe("Python code to execute"),
@@ -182,6 +253,7 @@ export class WorkspaceAgent extends Agent<Env> {
     if (typeof message !== "string") return;
     const msg = JSON.parse(message) as ClientMessage;
     const agentId = msg.agentId;
+    console.log(`[WorkspaceAgent] Received message:`, msg.type, agentId);
 
     switch (msg.type) {
       case "start":
@@ -369,36 +441,80 @@ export class WorkspaceAgent extends Agent<Env> {
   }
 
   createResearcherTools(agentId: AgentRole): ToolSet {
-    const agent = this;
+    const parallel = new Parallel({ apiKey: this.env.PARALLEL_API_KEY });
+
     return {
       searchWeb: tool({
-        description: "Search the web for information",
+        description:
+          "Search the web for information relevant to a research objective",
         inputSchema: searchWebInputSchema,
         execute: async (args: z.infer<typeof searchWebInputSchema>) => {
-          const res = await fetch(
-            `https://api.parallel.ai/v1/search?q=${encodeURIComponent(args.query)}`,
-            {
-              headers: {
-                Authorization: `Bearer ${agent.env.PARALLEL_API_KEY}`,
-              },
-            },
-          );
-          return res.json();
+          const searchParams = {
+            mode: "agentic" as const,
+            objective: args.objective,
+            search_queries: args.queries?.slice(0, MAX_SEARCH_QUERIES),
+            max_results: args.maxResults,
+          };
+
+          const results = await parallel.beta.search(searchParams);
+
+          return {
+            searchParams: args,
+            answer: results,
+          };
         },
       }),
       searchArxiv: tool({
-        description: "Search arXiv for academic papers",
+        description: "Search arXiv for academic papers and preprints",
         inputSchema: searchArxivInputSchema,
         execute: async (args: z.infer<typeof searchArxivInputSchema>) => {
-          const res = await fetch(
-            `https://api.parallel.ai/v1/arxiv?q=${encodeURIComponent(args.query)}&max=${args.maxResults ?? 5}`,
-            {
-              headers: {
-                Authorization: `Bearer ${agent.env.PARALLEL_API_KEY}`,
-              },
-            },
+          const searchParams = {
+            mode: "agentic" as const,
+            objective: `Find academic papers about: ${args.query}`,
+            search_queries: [args.query],
+            max_results: args.maxResults,
+            site_filter: ["arxiv.org"],
+          };
+
+          const results = await parallel.beta.search(searchParams);
+
+          return {
+            searchParams: args,
+            answer: results,
+          };
+        },
+      }),
+      extract: tool({
+        description:
+          "Extract content from specific URLs. Use this when you have URLs you want to read and extract information from.",
+        inputSchema: extractInputSchema,
+        execute: async (args: z.infer<typeof extractInputSchema>) => {
+          const extractSettings = getExtractSettings(
+            args.extractType ?? "focused",
           );
-          return res.json();
+
+          const fetchPolicy =
+            args.freshness === "fresh"
+              ? {
+                  max_age_seconds: 600,
+                  timeout_seconds: 60,
+                }
+              : undefined;
+
+          const extractParams = {
+            urls: args.urls.slice(0, 10),
+            objective: args.objective,
+            search_queries: args.queries?.slice(0, MAX_SEARCH_QUERIES),
+            ...extractSettings,
+            ...(fetchPolicy && { fetch_policy: fetchPolicy }),
+          };
+
+          const results = await parallel.beta.extract(extractParams);
+
+          return {
+            extractParams: args,
+            answer: results,
+          };
         },
       }),
     };
@@ -527,13 +643,6 @@ export class WorkspaceAgent extends Agent<Env> {
           }
         },
         onFinish: async ({ text }) => {
-          await this.addActivity(
-            agentId,
-            "reasoning",
-            { content: text },
-            streamId,
-            false,
-          );
           await this.addMessage(agentId, "assistant", text);
           await this.createFinding(agentId, text);
           await this.setKV(agentId, "status", "done");
@@ -560,9 +669,13 @@ export class WorkspaceAgent extends Agent<Env> {
       });
 
       let lastBroadcast = 0;
+      console.log(`[WorkspaceAgent] Starting stream for ${agentId}`);
       for await (const chunk of textStream) {
         fullText += chunk;
         if (Date.now() - lastBroadcast > 50) {
+          console.log(
+            `[WorkspaceAgent] Broadcasting text-delta for ${agentId}, length: ${fullText.length}`,
+          );
           this.broadcast({
             type: "text-delta",
             agentId,
@@ -572,6 +685,9 @@ export class WorkspaceAgent extends Agent<Env> {
           lastBroadcast = Date.now();
         }
       }
+      console.log(
+        `[WorkspaceAgent] Stream complete for ${agentId}, total length: ${fullText.length}`,
+      );
     } catch (error) {
       if (abortController.signal.aborted) return;
       const errMsg = error instanceof Error ? error.message : "Unknown error";

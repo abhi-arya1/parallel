@@ -48,6 +48,11 @@ type ToolCard = {
   timestamp: number;
 };
 
+type TimelineItem =
+  | { type: "activity"; data: Activity; timestamp: number }
+  | { type: "tool"; data: ToolCard; timestamp: number }
+  | { type: "message"; data: Message; timestamp: number };
+
 function groupActivitiesIntoToolCards(activities: Activity[]): {
   toolCards: Map<string, ToolCard>;
   otherActivities: Activity[];
@@ -101,6 +106,7 @@ function groupActivitiesIntoToolCards(activities: Activity[]): {
 
 export function AgentActivityStream({
   activity,
+  messages,
   streamingText,
   pendingCode,
   isAwaitingApproval,
@@ -109,16 +115,16 @@ export function AgentActivityStream({
 }: AgentActivityStreamProps) {
   const { toolCards, otherActivities } = groupActivitiesIntoToolCards(activity);
 
-  const items: Array<
-    | { type: "activity"; data: Activity; timestamp: number }
-    | { type: "tool"; data: ToolCard; timestamp: number }
-  > = [];
+  const items: TimelineItem[] = [];
 
   for (const act of otherActivities) {
     items.push({ type: "activity", data: act, timestamp: act.createdAt });
   }
   for (const tool of toolCards.values()) {
     items.push({ type: "tool", data: tool, timestamp: tool.timestamp });
+  }
+  for (const msg of messages) {
+    items.push({ type: "message", data: msg, timestamp: msg.timestamp });
   }
 
   items.sort((a, b) => a.timestamp - b.timestamp);
@@ -148,11 +154,14 @@ export function AgentActivityStream({
         </div>
       )}
 
-      {items.map((item) => {
+      {items.map((item, idx) => {
         if (item.type === "activity") {
           return <ActivityItem key={item.data.id} activity={item.data} />;
         }
-        return <ToolCardItem key={item.data.id} tool={item.data} />;
+        if (item.type === "tool") {
+          return <ToolCardItem key={item.data.id} tool={item.data} />;
+        }
+        return <MessageItem key={`msg-${idx}`} message={item.data} />;
       })}
 
       {streamingText && (
@@ -161,6 +170,22 @@ export function AgentActivityStream({
           <span className="inline-block w-1.5 h-4 bg-foreground/70 ml-0.5 animate-pulse align-middle" />
         </div>
       )}
+    </div>
+  );
+}
+
+function MessageItem({ message }: { message: Message }) {
+  if (message.role === "user") {
+    return (
+      <div className="bg-muted/50 rounded-lg px-3 py-2">
+        <p className="text-sm">{message.content}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <MarkdownPreview content={message.content} compact />
     </div>
   );
 }

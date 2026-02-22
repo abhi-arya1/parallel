@@ -23,7 +23,6 @@ interface ResizableLayoutProps {
   onCloseAgentPanel?: () => void;
   onSteer?: (role: AgentRole, content: string) => void;
   onClear?: (role: AgentRole) => void;
-  onSetAutoApprove?: (role: AgentRole, value: boolean) => void;
   onApprove?: (role: AgentRole) => void;
   onReject?: (role: AgentRole, feedback?: string) => void;
   showRunsPanel?: boolean;
@@ -40,9 +39,6 @@ export function ResizableLayout({
   onCloseAgentPanel,
   onSteer,
   onClear,
-  onSetAutoApprove,
-  onApprove,
-  onReject,
   showRunsPanel,
   onCloseRunsPanel,
   workspaceId,
@@ -143,14 +139,11 @@ export function ResizableLayout({
           <AgentDetailPanel
             role={selectedAgentRole}
             status={selectedAgent.status}
-            autoApprove={selectedAgent.autoApprove}
             activity={selectedAgent.activity}
+            messages={selectedAgent.messages}
             streamingText={selectedAgent.streamingText}
             onSteer={(content) => onSteer?.(selectedAgentRole, content)}
             onClear={() => onClear?.(selectedAgentRole)}
-            onSetAutoApprove={(value) =>
-              onSetAutoApprove?.(selectedAgentRole, value)
-            }
             onClose={onCloseAgentPanel}
           />
         )}

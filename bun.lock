@@ -22,6 +22,7 @@
         "ai": "^6.0.97",
         "drizzle-orm": "^0.45.0",
         "nanoid": "^5.1.6",
+        "parallel-web": "^0.3.1",
         "zod": "^4.3.6",
       },
       "devDependencies": {
@@ -111,6 +112,7 @@
       "name": "@repo/agent-kit",
       "version": "0.0.1",
       "dependencies": {
+        "parallel-web": "^0.3.1",
         "zod": "^3.23.8",
       },
       "devDependencies": {
@@ -1633,6 +1635,8 @@
     "p-locate": ["p-locate@5.0.0", "", { "dependencies": { "p-limit": "^3.0.2" } }, "sha512-LaNjtRWUBY++zB5nE/NwcaoMylSPk+S+ZHNB1TzdbMJMny6dynpAGt7X/tl/QYq3TIeE6nxHppbo2LGymrG5Pw=="],
 
     "package-manager-detector": ["package-manager-detector@1.6.0", "", {}, "sha512-61A5ThoTiDG/C8s8UMZwSorAGwMJ0ERVGj2OjoW5pAalsNOg15+iQiPzrLJ4jhZ1HJzmC2PIHT2oEiH3R5fzNA=="],
+
+    "parallel-web": ["parallel-web@0.3.1", "", {}, "sha512-1yLiqdjFFhwgZUV2qOLTvu36A3wiCld8/Y8Zu1FsGk6y4ov4cZPhXNGafjDkM68aFc1c5KVB9ZYpkJZZ/mZW/w=="],
 
     "parent-module": ["parent-module@1.0.1", "", { "dependencies": { "callsites": "^3.0.0" } }, "sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g=="],
 

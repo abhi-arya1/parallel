@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { useAgent } from "agents/react";
 import type { Id } from "@/convex/_generated/dataModel";
 
@@ -112,6 +112,17 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
     reviewer: initialState("reviewer"),
   });
 
+  // Ref to access connection from handleMessage without circular deps
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const connectionRef = useRef<any>(null);
+
+  const sendSync = useCallback((agentId: AgentRole) => {
+    const conn = connectionRef.current;
+    if (conn && conn.readyState === WebSocket.OPEN) {
+      conn.send(JSON.stringify({ type: "sync", agentId }));
+    }
+  }, []);
+
   const updateAgent = useCallback(
     (agentId: AgentRole, update: Partial<AgentState>) => {
       setAgents((prev) => ({
@@ -127,6 +138,7 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
       try {
         const msg = JSON.parse(event.data) as ServerMessage;
         const agentId = msg.agentId;
+        console.log(`[Agent:${agentId}] Received:`, msg.type, msg);
 
         switch (msg.type) {
           case "state":
@@ -214,11 +226,15 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
             break;
 
           case "finish":
+            // Clear streaming state - the assistant message is already
+            // saved server-side and will come via the state sync
             updateAgent(agentId, {
               status: "done",
               streamingText: undefined,
               streamId: undefined,
             });
+            // Request fresh state from server to get the persisted message
+            sendSync(agentId);
             break;
 
           case "error":
@@ -248,7 +264,7 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
         console.error("Failed to parse message:", event.data);
       }
     },
-    [updateAgent],
+    [updateAgent, sendSync],
   );
 
   const handleOpen = useCallback(() => {
@@ -279,6 +295,11 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
     onOpen: handleOpen,
     onClose: handleClose,
   });
+
+  // Keep ref in sync for use in handleMessage
+  useEffect(() => {
+    connectionRef.current = connection;
+  }, [connection]);
 
   const send = useCallback(
     (message: ClientMessage) => {

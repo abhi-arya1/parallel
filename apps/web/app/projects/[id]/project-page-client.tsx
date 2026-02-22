@@ -51,8 +51,9 @@ export function ProjectPageClient({
   );
   const [showRunsPanel, setShowRunsPanel] = useState(false);
 
-  const { agents, steer, clear, setAutoApprove, approve, reject } =
-    useAgentConnections(workspace?._id);
+  const { agents, steer, clear, approve, reject } = useAgentConnections(
+    workspace?._id,
+  );
 
   const handleSelectAgent = (role: AgentRole | null) => {
     setSelectedAgentRole(role);
@@ -187,7 +188,6 @@ export function ProjectPageClient({
         onCloseAgentPanel={() => setSelectedAgentRole(null)}
         onSteer={steer}
         onClear={clear}
-        onSetAutoApprove={setAutoApprove}
         onApprove={approve}
         onReject={reject}
         showRunsPanel={showRunsPanel}

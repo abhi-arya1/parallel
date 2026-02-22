@@ -584,6 +584,7 @@ export class WorkspaceAgent extends Agent<Env> {
 
     const streamId = nanoid();
     let fullText = "";
+    let lastBroadcast = 0;
     const tools = this.getTools(agentId);
 
     try {
@@ -598,22 +599,24 @@ export class WorkspaceAgent extends Agent<Env> {
           chunking: "word",
         }),
         abortSignal: abortController.signal,
-        onChunk: async ({ chunk }) => {
-          if (chunk.type === "tool-call") {
-            const input = "input" in chunk ? chunk.input : undefined;
-            await this.addActivity(agentId, "tool-call", {
+        onChunk: ({ chunk }) => {
+          if (chunk.type === "text-delta") {
+            fullText += chunk.text;
+            if (Date.now() - lastBroadcast > 50) {
+              this.broadcast({
+                type: "text-delta",
+                agentId,
+                text: fullText,
+                streamId,
+              });
+              lastBroadcast = Date.now();
+            }
+          } else if (chunk.type === "tool-call") {
+            const input = "args" in chunk ? chunk.args : undefined;
+            this.addActivity(agentId, "tool-call", {
               toolName: chunk.toolName,
               input,
             });
-            await this.convex?.postActivity(
-              this.workspaceId,
-              agentId,
-              "tool-call",
-              {
-                toolName: chunk.toolName,
-                input,
-              },
-            );
             this.broadcast({
               type: "tool-call",
               agentId,
@@ -621,19 +624,10 @@ export class WorkspaceAgent extends Agent<Env> {
               input,
             });
           } else if (chunk.type === "tool-result") {
-            await this.addActivity(agentId, "tool-result", {
+            this.addActivity(agentId, "tool-result", {
               toolName: chunk.toolName,
               output: chunk.output,
             });
-            await this.convex?.postActivity(
-              this.workspaceId,
-              agentId,
-              "tool-result",
-              {
-                toolName: chunk.toolName,
-                output: chunk.output,
-              },
-            );
             this.broadcast({
               type: "tool-result",
               agentId,
@@ -643,15 +637,17 @@ export class WorkspaceAgent extends Agent<Env> {
           }
         },
         onFinish: async ({ text }) => {
-          await this.addMessage(agentId, "assistant", text);
-          await this.createFinding(agentId, text);
+          // Use accumulated fullText since text may only be last step
+          const finalText = fullText || text;
+          await this.addMessage(agentId, "assistant", finalText);
+          await this.createFinding(agentId, finalText);
           await this.setKV(agentId, "status", "done");
           await this.convex?.updateAgentStatus(
             this.workspaceId,
             agentId,
             "done",
           );
-          this.broadcast({ type: "finish", agentId, text });
+          this.broadcast({ type: "finish", agentId, text: finalText });
           this.broadcast({ type: "status", agentId, status: "done" });
         },
         onError: async ({ error }) => {
@@ -668,26 +664,10 @@ export class WorkspaceAgent extends Agent<Env> {
         },
       });
 
-      let lastBroadcast = 0;
-      console.log(`[WorkspaceAgent] Starting stream for ${agentId}`);
-      for await (const chunk of textStream) {
-        fullText += chunk;
-        if (Date.now() - lastBroadcast > 50) {
-          console.log(
-            `[WorkspaceAgent] Broadcasting text-delta for ${agentId}, length: ${fullText.length}`,
-          );
-          this.broadcast({
-            type: "text-delta",
-            agentId,
-            text: fullText,
-            streamId,
-          });
-          lastBroadcast = Date.now();
-        }
+      // Consume the stream to drive the callbacks
+      for await (const _ of textStream) {
+        // onChunk handles broadcasting
       }
-      console.log(
-        `[WorkspaceAgent] Stream complete for ${agentId}, total length: ${fullText.length}`,
-      );
     } catch (error) {
       if (abortController.signal.aborted) return;
       const errMsg = error instanceof Error ? error.message : "Unknown error";

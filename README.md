@@ -1,135 +1,91 @@
-# Turborepo starter
+<p align="center">
+  <h1 align="center">Parallel</h1>
+  <p align="center">Collaborative computational notebooks with AI research agents</p>
+</p>
 
-This Turborepo starter is maintained by the Turborepo core team.
+<p align="center">
+  <a href="https://humansand.ai">Built at Humans& Product Hackathon</a>
+</p>
 
-## Using this example
+<br/>
 
-Run the following command:
+<p align="center">
+  <img src=".github/assets/product.png" alt="Parallel — AI agents collaborating in a computational notebook" width="100%" />
+</p>
 
-```sh
-npx create-turbo@latest
-```
+## The Problem
 
-## What's inside?
+Research is inherently collaborative, but the tools aren't. Computational notebooks today are single-player experiences — one person writing code, reading papers, and validating results alone. Scaling a research workflow means hiring more people and waiting for them to get up to speed.
 
-This Turborepo includes the following packages/apps:
+## What Parallel Does
 
-### Apps and Packages
+Parallel turns your notebook into a multiplayer research environment where AI agents work alongside you as specialized team members. You set a hypothesis, and your team gets to work:
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+- **Engineer** — designs experiments, writes reproducible code, and executes it in sandboxed environments
+- **Researcher** — searches arXiv and the web for relevant literature, surfacing papers and prior work
+- **Reviewer** — pokes holes in your methodology, identifies biases, and flags statistical issues
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+Agents contribute findings directly into your notebook in real-time. You stay in control — review their work, run their code, and iterate together.
 
-### Utilities
+<p align="center">
+  <img src=".github/assets/product-2.png" alt="Notebook with live code execution and rich output" width="100%" />
+</p>
 
-This Turborepo has some additional tools already setup for you:
+## Features
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+- **Real-time collaboration** — multiple users editing the same notebook simultaneously via Yjs
+- **AI agent roles** — spawn Engineer, Researcher, or Reviewer agents scoped to your workspace
+- **Live code execution** — run Python in isolated containers with GPU support (T4 through H200)
+- **Research tools** — agents can search arXiv, browse the web, and execute code autonomously
+- **Rich output** — inline plots, dataframes, images, and LaTeX math rendering
+- **Activity streams** — watch agents think, plan, and contribute in real-time
 
-### Build
-
-To build all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
-```
-
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+## Architecture
 
 ```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
+apps/
+  web/          → Next.js frontend, Convex backend
+  agents/       → Cloudflare Durable Objects for persistent agent state
+  sync/         → Yjs WebSocket sync server (Hono + PartyServer)
+  sandboxes/    → Python execution containers (FastAPI + Modal for GPU)
 
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+packages/
+  agent-kit/       → Core agent types and tool implementations
+  agent-kit-react/ → React hooks for agent streaming and chat
+  ui/              → Shared component library
 ```
 
-### Develop
+## Tech Stack
 
-To develop all apps and packages, run the following command:
+| Layer | Tech |
+|-------|------|
+| Frontend | Next.js 16, React 19, Tailwind CSS, Monaco Editor, Tiptap |
+| Backend | Convex (DB + auth + functions) |
+| Agents | Cloudflare Durable Objects, AI SDK, Claude Sonnet 4.6 |
+| Sync | Yjs, PartyServer, Upstash Redis |
+| Execution | FastAPI, Modal (GPU sandboxes), Docker |
+| Monorepo | Turborepo, Bun |
 
-```
-cd my-turborepo
+## Getting Started
 
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
+```bash
+# Install dependencies
+bun install
+
+# Run all services in dev mode
 turbo dev
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Individual services:
 
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
+```bash
+turbo dev --filter=web        # Next.js app (port 3000)
+turbo dev --filter=agents     # Agent server
+turbo dev --filter=sync       # Sync server (port 8383)
 ```
 
-### Remote Caching
+Built solo in 8 hours at the [Humans& Product Hackathon](https://humansand.ai).
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+<p align="center">
+  <img src=".github/assets/lander.png" alt="Parallel — AI agents collaborating in a computational notebook" width="100%" />
+</p>

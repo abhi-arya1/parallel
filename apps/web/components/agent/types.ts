@@ -6,7 +6,6 @@ export type AgentStatus =
   | "spawning"
   | "thinking"
   | "working"
-  | "awaiting_approval"
   | "done"
   | "idle"
   | "error";
@@ -42,7 +41,6 @@ export interface AgentState {
   messages: Message[];
   streamingText?: string;
   streamId?: string;
-  pendingCode?: string;
   connected: boolean;
 }
 
@@ -56,8 +54,6 @@ export interface Agent {
   error?: string;
   startedAt?: number;
   completedAt?: number;
-  pendingAction?: "execute_code" | "publish_finding";
-  pendingCode?: string;
 }
 
 export interface ActivityItem {
@@ -120,12 +116,6 @@ export const AGENT_STATUS_CONFIG: Record<
     label: "Working",
     color: "text-amber-500",
     bgColor: "bg-amber-500/10",
-  },
-  awaiting_approval: {
-    label: "Needs You",
-    color: "text-orange-500",
-    bgColor: "bg-orange-500/10",
-    showLabel: true,
   },
   done: {
     label: "",

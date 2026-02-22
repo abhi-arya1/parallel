@@ -51,9 +51,7 @@ export function ProjectPageClient({
   );
   const [showRunsPanel, setShowRunsPanel] = useState(false);
 
-  const { agents, steer, clear, approve, reject } = useAgentConnections(
-    workspace?._id,
-  );
+  const { agents, steer, clear } = useAgentConnections(workspace?._id);
 
   const handleSelectAgent = (role: AgentRole | null) => {
     setSelectedAgentRole(role);
@@ -116,7 +114,7 @@ export function ProjectPageClient({
   return (
     <div className="relative h-screen">
       <div className="absolute top-3 right-3 z-50 flex items-center gap-2">
-        {workspace && <ResearchButton workspaceId={workspace._id} />}
+        {/*{workspace && <ResearchButton workspaceId={workspace._id} />}*/}
 
         <button
           onClick={handleRunAll}
@@ -188,8 +186,6 @@ export function ProjectPageClient({
         onCloseAgentPanel={() => setSelectedAgentRole(null)}
         onSteer={steer}
         onClear={clear}
-        onApprove={approve}
-        onReject={reject}
         showRunsPanel={showRunsPanel}
         onCloseRunsPanel={() => setShowRunsPanel(false)}
         workspaceId={workspace?._id}

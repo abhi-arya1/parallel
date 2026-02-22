@@ -20,9 +20,7 @@ export function AgentStatusCard({
 }: AgentStatusCardProps) {
   const roleConfig = AGENT_ROLE_CONFIG[role];
   const statusConfig = AGENT_STATUS_CONFIG[status];
-  const isActive = ["thinking", "working", "awaiting_approval"].includes(
-    status,
-  );
+  const isActive = ["thinking", "working"].includes(status);
 
   return (
     <button
@@ -37,22 +35,8 @@ export function AgentStatusCard({
         <AgentAvatar role={role} status={status} size={28} />
         {isActive && (
           <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-            <span
-              className={cn(
-                "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
-                status === "awaiting_approval"
-                  ? "bg-orange-400"
-                  : "bg-blue-400",
-              )}
-            />
-            <span
-              className={cn(
-                "relative inline-flex rounded-full h-2 w-2",
-                status === "awaiting_approval"
-                  ? "bg-orange-500"
-                  : "bg-blue-500",
-              )}
-            />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-blue-400" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
           </span>
         )}
       </div>

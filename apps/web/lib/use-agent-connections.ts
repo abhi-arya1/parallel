@@ -8,13 +8,7 @@ const AGENTS_URL =
   process.env.NEXT_PUBLIC_AGENTS_URL || "http://localhost:8787";
 
 export type AgentRole = "engineer" | "researcher" | "reviewer";
-export type AgentStatus =
-  | "idle"
-  | "thinking"
-  | "working"
-  | "awaiting_approval"
-  | "done"
-  | "error";
+export type AgentStatus = "idle" | "thinking" | "working" | "done" | "error";
 
 export interface Activity {
   id: string;
@@ -47,7 +41,6 @@ export interface AgentState {
   messages: Message[];
   streamingText?: string;
   streamId?: string;
-  pendingCode?: string;
   connected: boolean;
 }
 
@@ -62,14 +55,15 @@ type ServerMessage =
     }
   | { type: "status"; agentId: AgentRole; status: AgentStatus }
   | { type: "text-delta"; agentId: AgentRole; text: string; streamId: string }
-  | { type: "tool-call"; agentId: AgentRole; toolName: string; input: unknown }
+  | { type: "tool-input-start"; agentId: AgentRole; toolCallId?: string; toolName: string }
+  | { type: "tool-call"; agentId: AgentRole; toolCallId?: string; toolName: string; input: unknown }
   | {
       type: "tool-result";
       agentId: AgentRole;
+      toolCallId?: string;
       toolName: string;
       output: unknown;
     }
-  | { type: "needs-approval"; agentId: AgentRole; action: string; code: string }
   | {
       type: "finding";
       agentId: AgentRole;
@@ -81,16 +75,9 @@ type ServerMessage =
   | { type: "error"; agentId: AgentRole; message: string };
 
 type ClientMessage =
-  | {
-      type: "start";
-      agentId: AgentRole;
-      hypothesis: string;
-      notebookContext?: string;
-    }
+  | { type: "start"; agentId: AgentRole; hypothesis: string }
   | { type: "steer"; agentId: AgentRole; content: string }
   | { type: "stop"; agentId: AgentRole }
-  | { type: "approve"; agentId: AgentRole }
-  | { type: "reject"; agentId: AgentRole; feedback?: string }
   | { type: "sync"; agentId: AgentRole }
   | { type: "clear"; agentId: AgentRole };
 
@@ -163,29 +150,61 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
             });
             break;
 
-          case "needs-approval":
-            updateAgent(agentId, {
-              status: "awaiting_approval",
-              pendingCode: msg.code,
+          case "tool-input-start":
+            setAgents((prev) => {
+              const currentAgent = prev[agentId];
+              const newActivity = [...currentAgent.activity];
+
+              // Save any streaming text as reasoning before the tool call
+              if (currentAgent.streamingText) {
+                newActivity.push({
+                  id: `reasoning-${Date.now()}`,
+                  type: "reasoning",
+                  content: { content: currentAgent.streamingText },
+                  createdAt: Date.now() - 1,
+                });
+              }
+
+              newActivity.push({
+                id: msg.toolCallId || `tool-start-${Date.now()}`,
+                type: "tool-input-start",
+                content: { toolCallId: msg.toolCallId, toolName: msg.toolName },
+                createdAt: Date.now(),
+              });
+
+              return {
+                ...prev,
+                [agentId]: {
+                  ...currentAgent,
+                  activity: newActivity,
+                  status: "working",
+                  streamingText: undefined,
+                  streamId: undefined,
+                },
+              };
             });
             break;
 
           case "tool-call":
-            setAgents((prev) => ({
-              ...prev,
-              [agentId]: {
-                ...prev[agentId],
-                activity: [
-                  ...prev[agentId].activity,
-                  {
-                    id: `tool-${Date.now()}`,
-                    type: "tool-call",
-                    content: { toolName: msg.toolName, input: msg.input },
-                    createdAt: Date.now(),
-                  },
-                ],
-              },
-            }));
+            setAgents((prev) => {
+              const currentAgent = prev[agentId];
+              const newActivity = [...currentAgent.activity];
+
+              newActivity.push({
+                id: msg.toolCallId || `tool-${Date.now()}`,
+                type: "tool-call",
+                content: { toolCallId: msg.toolCallId, toolName: msg.toolName, input: msg.input },
+                createdAt: Date.now(),
+              });
+
+              return {
+                ...prev,
+                [agentId]: {
+                  ...currentAgent,
+                  activity: newActivity,
+                },
+              };
+            });
             break;
 
           case "tool-result":
@@ -196,9 +215,9 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
                 activity: [
                   ...prev[agentId].activity,
                   {
-                    id: `result-${Date.now()}`,
+                    id: msg.toolCallId || `result-${Date.now()}`,
                     type: "tool-result",
-                    content: { toolName: msg.toolName, output: msg.output },
+                    content: { toolCallId: msg.toolCallId, toolName: msg.toolName, output: msg.output },
                     createdAt: Date.now(),
                   },
                 ],
@@ -238,15 +257,13 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
             break;
 
           case "error":
-            updateAgent(agentId, {
-              status: "error",
-              streamingText: undefined,
-              streamId: undefined,
-            });
             setAgents((prev) => ({
               ...prev,
               [agentId]: {
                 ...prev[agentId],
+                status: "error",
+                streamingText: undefined,
+                streamId: undefined,
                 activity: [
                   ...prev[agentId].activity,
                   {
@@ -326,9 +343,9 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
   }, [workspaceId, connection?.readyState, syncAgent]);
 
   const startResearch = useCallback(
-    (hypothesis: string, notebookContext?: string) => {
+    (hypothesis: string) => {
       for (const role of ALL_ROLES) {
-        send({ type: "start", agentId: role, hypothesis, notebookContext });
+        send({ type: "start", agentId: role, hypothesis });
       }
     },
     [send],
@@ -365,20 +382,6 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
     }
   }, [send]);
 
-  const approve = useCallback(
-    (role: AgentRole) => {
-      send({ type: "approve", agentId: role });
-    },
-    [send],
-  );
-
-  const reject = useCallback(
-    (role: AgentRole, feedback?: string) => {
-      send({ type: "reject", agentId: role, feedback });
-    },
-    [send],
-  );
-
   const clear = useCallback(
     (role: AgentRole) => {
       setAgents((prev) => ({
@@ -401,7 +404,7 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
   }, [send]);
 
   const hasActiveAgents = Object.values(agents).some((a) =>
-    ["thinking", "working", "awaiting_approval"].includes(a.status),
+    ["thinking", "working"].includes(a.status),
   );
 
   const isConnected = Object.values(agents).every((a) => a.connected);
@@ -414,8 +417,6 @@ export function useAgentConnections(workspaceId: Id<"workspaces"> | undefined) {
     steer,
     stop,
     stopAll,
-    approve,
-    reject,
     clear,
     clearAll,
     syncAgent,

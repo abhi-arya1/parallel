@@ -42,16 +42,9 @@ type AgentStatus =
   | "error";
 
 type ClientMessage =
-  | {
-      type: "start";
-      agentId: AgentRole;
-      hypothesis: string;
-      notebookContext?: string;
-    }
+  | { type: "start"; agentId: AgentRole; hypothesis: string }
   | { type: "steer"; agentId: AgentRole; content: string }
   | { type: "stop"; agentId: AgentRole }
-  | { type: "approve"; agentId: AgentRole }
-  | { type: "reject"; agentId: AgentRole; feedback?: string }
   | { type: "sync"; agentId: AgentRole }
   | { type: "clear"; agentId: AgentRole };
 
@@ -257,19 +250,13 @@ export class WorkspaceAgent extends Agent<Env> {
 
     switch (msg.type) {
       case "start":
-        await this.handleStart(agentId, msg.hypothesis, msg.notebookContext);
+        await this.handleStart(agentId, msg.hypothesis);
         break;
       case "steer":
         await this.handleSteer(agentId, msg.content);
         break;
       case "stop":
         await this.handleStop(agentId);
-        break;
-      case "approve":
-        await this.handleApprove(agentId);
-        break;
-      case "reject":
-        await this.handleReject(agentId, msg.feedback);
         break;
       case "sync":
         await this.sendAgentState(agentId);
@@ -308,18 +295,51 @@ export class WorkspaceAgent extends Agent<Env> {
     }
   }
 
-  async handleStart(
-    agentId: AgentRole,
-    hypothesis: string,
-    notebookContext?: string,
-  ): Promise<void> {
+  async fetchNotebookContext(): Promise<string | null> {
+    const syncUrl = this.env.SYNC_SERVER_URL;
+    if (!syncUrl) {
+      console.log(`[WorkspaceAgent] No SYNC_SERVER_URL configured`);
+      return null;
+    }
+
+    try {
+      const res = await fetch(
+        `${syncUrl}/parties/document/workspace-${this.workspaceId}/markdown`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.env.INTERNAL_API_KEY}`,
+          },
+        },
+      );
+      if (!res.ok) {
+        console.log(`[WorkspaceAgent] Failed to fetch notebook: ${res.status}`);
+        return null;
+      }
+      const data = (await res.json()) as { markdown?: string };
+      console.log(
+        `[WorkspaceAgent] Fetched notebook context: ${data.markdown?.length ?? 0} chars`,
+      );
+      return data.markdown || null;
+    } catch (error) {
+      console.error(`[WorkspaceAgent] Error fetching notebook:`, error);
+      return null;
+    }
+  }
+
+  async handleStart(agentId: AgentRole, hypothesis: string): Promise<void> {
     await this.setKV(agentId, "status", "thinking");
     await this.convex?.updateAgentStatus(this.workspaceId, agentId, "thinking");
     this.broadcast({ type: "status", agentId, status: "thinking" });
 
+    const notebookContext = await this.fetchNotebookContext();
+    console.log(
+      `[WorkspaceAgent:${agentId}] Notebook markdown before start (${notebookContext?.length ?? 0} chars):`,
+      notebookContext ? notebookContext.slice(0, 500) : "(empty)",
+    );
+
     const systemPrompt = this.getSystemPrompt(agentId);
     const contextPart = notebookContext
-      ? `\n\nNotebook context:\n${notebookContext}`
+      ? `\n\n<notebook_context>\n${notebookContext}\n</notebook_context>`
       : "";
     await this.addMessage(agentId, "user", hypothesis);
     await this.runAgent(
@@ -342,10 +362,24 @@ export class WorkspaceAgent extends Agent<Env> {
     }
     await this.addMessage(agentId, "user", content);
     const messages = await this.getMessages(agentId);
+
+    const notebookContext = await this.fetchNotebookContext();
+    console.log(
+      `[WorkspaceAgent:${agentId}] Notebook markdown before steer (${notebookContext?.length ?? 0} chars):`,
+      notebookContext ? notebookContext.slice(0, 500) : "(empty)",
+    );
+
+    const contextPart = notebookContext
+      ? `\n\n<notebook_context>\n${notebookContext}\n</notebook_context>`
+      : "";
+    const conversationHistory = messages
+      .map((m) => `${m.role}: ${m.content}`)
+      .join("\n\n");
+
     await this.runAgent(
       agentId,
       this.getSystemPrompt(agentId),
-      messages.map((m) => `${m.role}: ${m.content}`).join("\n\n"),
+      `${conversationHistory}${contextPart}`,
     );
   }
 
@@ -356,57 +390,6 @@ export class WorkspaceAgent extends Agent<Env> {
     await this.setKV(agentId, "status", "idle");
     await this.convex?.updateAgentStatus(this.workspaceId, agentId, "idle");
     this.broadcast({ type: "status", agentId, status: "idle" });
-  }
-
-  async handleApprove(agentId: AgentRole): Promise<void> {
-    const pendingCode = await this.getKV(agentId, "pendingCode");
-    if (!pendingCode) return;
-
-    await this.setKV(agentId, "status", "working");
-    await this.convex?.updateAgentStatus(this.workspaceId, agentId, "working");
-    this.broadcast({ type: "status", agentId, status: "working" });
-
-    try {
-      const result = await this.executeCode(pendingCode);
-      await this.addActivity(agentId, "tool-result", {
-        toolName: "execute_code",
-        output: result,
-      });
-      await this.convex?.postActivity(
-        this.workspaceId,
-        agentId,
-        "tool-result",
-        {
-          toolName: "execute_code",
-          output: result,
-        },
-      );
-      this.broadcast({
-        type: "tool-result",
-        agentId,
-        toolName: "execute_code",
-        output: result,
-      });
-      await this.setKV(agentId, "pendingCode", null);
-      await this.setKV(agentId, "status", "done");
-      await this.convex?.updateAgentStatus(this.workspaceId, agentId, "done");
-      this.broadcast({ type: "status", agentId, status: "done" });
-    } catch (error) {
-      const errMsg =
-        error instanceof Error ? error.message : "Execution failed";
-      await this.addActivity(agentId, "error", { message: errMsg });
-      await this.setKV(agentId, "status", "error");
-      await this.convex?.updateAgentStatus(this.workspaceId, agentId, "error");
-      this.broadcast({ type: "error", agentId, message: errMsg });
-    }
-  }
-
-  async handleReject(agentId: AgentRole, feedback?: string): Promise<void> {
-    await this.setKV(agentId, "pendingCode", null);
-    await this.setKV(agentId, "status", "done");
-    await this.addActivity(agentId, "approval", { approved: false, feedback });
-    await this.convex?.updateAgentStatus(this.workspaceId, agentId, "done");
-    this.broadcast({ type: "status", agentId, status: "done" });
   }
 
   async handleClear(agentId: AgentRole): Promise<void> {
@@ -524,27 +507,24 @@ export class WorkspaceAgent extends Agent<Env> {
     const agent = this;
     return {
       executeCode: tool({
-        description: "Execute Python code in a sandbox",
+        description:
+          "Execute Python code in a sandbox. The workspace environment is already configured - just provide the code to run.",
         inputSchema: executeCodeInputSchema,
         execute: async (args: z.infer<typeof executeCodeInputSchema>) => {
-          await agent.setKV(agentId, "pendingCode", args.code);
-          await agent.setKV(agentId, "status", "awaiting_approval");
-          await agent.convex?.updateAgentStatus(
-            agent.workspaceId,
-            agentId,
-            "awaiting_approval",
-          );
-          agent.broadcast({
-            type: "needs-approval",
-            agentId,
-            action: "execute_code",
-            code: args.code,
+          const res = await fetch(`${agent.env.SANDBOX_URL}/execute`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              code: args.code,
+              workspace_id: agent.workspaceId,
+            }),
           });
-          return { pending: true, message: "Awaiting user approval" };
+          return res.json();
         },
       }),
       bash: tool({
-        description: "Execute a bash command",
+        description:
+          "Execute a bash command in the workspace sandbox. The workspace environment is already configured - just provide the command to run.",
         inputSchema: bashInputSchema,
         execute: async (args: z.infer<typeof bashInputSchema>) => {
           const res = await fetch(`${agent.env.SANDBOX_URL}/bash`, {
@@ -552,7 +532,7 @@ export class WorkspaceAgent extends Agent<Env> {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               command: args.command,
-              workspaceId: agent.workspaceId,
+              workspace_id: agent.workspaceId,
             }),
           });
           return res.json();
@@ -584,6 +564,7 @@ export class WorkspaceAgent extends Agent<Env> {
 
     const streamId = nanoid();
     let fullText = "";
+    let stepText = "";
     let lastBroadcast = 0;
     const tools = this.getTools(agentId);
 
@@ -602,42 +583,73 @@ export class WorkspaceAgent extends Agent<Env> {
         onChunk: ({ chunk }) => {
           if (chunk.type === "text-delta") {
             fullText += chunk.text;
+            stepText += chunk.text;
             if (Date.now() - lastBroadcast > 50) {
               this.broadcast({
                 type: "text-delta",
                 agentId,
-                text: fullText,
+                text: stepText,
                 streamId,
               });
               lastBroadcast = Date.now();
             }
+          } else if (chunk.type === "tool-input-start") {
+            const toolCallId = (chunk as any).toolCallId ?? (chunk as any).id;
+            // Flush final text before the tool call so client has complete reasoning
+            if (stepText) {
+              this.broadcast({
+                type: "text-delta",
+                agentId,
+                text: stepText,
+                streamId,
+              });
+            }
+            stepText = "";
+            this.addActivity(agentId, "tool-input-start", {
+              toolCallId,
+              toolName: chunk.toolName,
+            });
+            this.broadcast({
+              type: "tool-input-start",
+              agentId,
+              toolCallId,
+              toolName: chunk.toolName,
+            });
+            this.broadcast({ type: "status", agentId, status: "working" });
           } else if (chunk.type === "tool-call") {
             const input = "args" in chunk ? chunk.args : undefined;
+            const toolCallId = (chunk as any).toolCallId;
             this.addActivity(agentId, "tool-call", {
+              toolCallId,
               toolName: chunk.toolName,
               input,
             });
             this.broadcast({
               type: "tool-call",
               agentId,
+              toolCallId,
               toolName: chunk.toolName,
               input,
             });
           } else if (chunk.type === "tool-result") {
+            const toolCallId = (chunk as any).toolCallId;
             this.addActivity(agentId, "tool-result", {
+              toolCallId,
               toolName: chunk.toolName,
               output: chunk.output,
             });
             this.broadcast({
               type: "tool-result",
               agentId,
+              toolCallId,
               toolName: chunk.toolName,
               output: chunk.output,
             });
           }
         },
         onFinish: async ({ text }) => {
-          // Use accumulated fullText since text may only be last step
+          // Guard against racing with handleStop — if aborted, stop handler owns the state
+          if (abortController.signal.aborted) return;
           const finalText = fullText || text;
           await this.addMessage(agentId, "assistant", finalText);
           await this.createFinding(agentId, finalText);
@@ -651,6 +663,7 @@ export class WorkspaceAgent extends Agent<Env> {
           this.broadcast({ type: "status", agentId, status: "done" });
         },
         onError: async ({ error }) => {
+          if (abortController.signal.aborted) return;
           const errMsg =
             error instanceof Error ? error.message : "Unknown error";
           await this.addActivity(agentId, "error", { message: errMsg });
@@ -664,7 +677,6 @@ export class WorkspaceAgent extends Agent<Env> {
         },
       });
 
-      // Consume the stream to drive the callbacks
       for await (const _ of textStream) {
         // onChunk handles broadcasting
       }
@@ -678,15 +690,6 @@ export class WorkspaceAgent extends Agent<Env> {
     } finally {
       this.abortControllers.delete(agentId);
     }
-  }
-
-  async executeCode(code: string): Promise<unknown> {
-    const res = await fetch(`${this.env.SANDBOX_URL}/execute`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, workspaceId: this.workspaceId }),
-    });
-    return res.json();
   }
 
   async getKV(agentId: AgentRole, key: string): Promise<string | null> {

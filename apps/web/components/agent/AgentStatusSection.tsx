@@ -26,9 +26,7 @@ export function AgentStatusSection({
   const [isExpanded, setIsExpanded] = useState(true);
 
   const hasActiveAgents = ALL_ROLES.some((role) =>
-    ["spawning", "thinking", "working", "awaiting_approval"].includes(
-      agents[role].status,
-    ),
+    ["spawning", "thinking", "working"].includes(agents[role].status),
   );
 
   return (

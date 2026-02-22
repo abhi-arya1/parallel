@@ -23,8 +23,6 @@ interface ResizableLayoutProps {
   onCloseAgentPanel?: () => void;
   onSteer?: (role: AgentRole, content: string) => void;
   onClear?: (role: AgentRole) => void;
-  onApprove?: (role: AgentRole) => void;
-  onReject?: (role: AgentRole, feedback?: string) => void;
   showRunsPanel?: boolean;
   onCloseRunsPanel?: () => void;
   workspaceId?: Id<"workspaces">;

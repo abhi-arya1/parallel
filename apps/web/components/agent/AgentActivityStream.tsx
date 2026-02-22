@@ -10,6 +10,10 @@ import {
   Loading03Icon,
   ArrowDown01Icon,
   ArrowUp01Icon,
+  GlobalSearchIcon,
+  SourceCodeIcon,
+  ComputerTerminal01Icon,
+  FileSearchIcon,
 } from "@hugeicons-pro/core-duotone-rounded";
 import { MarkdownPreview } from "@/components/editor/MarkdownPreview";
 
@@ -55,42 +59,74 @@ function groupActivitiesIntoToolCards(activities: Activity[]): {
 } {
   const toolCards = new Map<string, ToolCard>();
   const otherActivities: Activity[] = [];
-  const toolCallTimestamps = new Map<string, number>();
+  // Fallback matching for legacy activities without toolCallId
+  const toolNameFallbackKeys = new Map<string, string>();
 
   for (const activity of activities) {
     const content = activity.content as Record<string, unknown> | null;
 
-    if (activity.type === "tool-call") {
+    if (
+      activity.type === "tool-input-start" ||
+      activity.type === "tool-call" ||
+      activity.type === "tool-result"
+    ) {
       const toolName = String(content?.toolName || "unknown");
-      const key = `${toolName}-${activity.createdAt}`;
-      toolCallTimestamps.set(toolName, activity.createdAt);
-      toolCards.set(key, {
-        id: key,
-        toolName,
-        input: content?.input ?? content?.args,
-        status: "pending",
-        timestamp: activity.createdAt,
-      });
-    } else if (activity.type === "tool-result") {
-      const toolName = String(content?.toolName || "unknown");
-      const callTimestamp = toolCallTimestamps.get(toolName);
-      const key = callTimestamp
-        ? `${toolName}-${callTimestamp}`
-        : `${toolName}-${activity.createdAt}`;
+      const toolCallId = content?.toolCallId ? String(content.toolCallId) : null;
+      const fallbackKey = toolNameFallbackKeys.get(toolName);
 
-      const existing = toolCards.get(key);
-      if (existing) {
-        existing.output = content?.output ?? content?.result;
-        existing.status = "complete";
-      } else {
+      if (activity.type === "tool-input-start") {
+        // tool-input-start may not have toolCallId — use fallback key
+        const key = toolCallId || `${toolName}-${activity.createdAt}`;
+        toolNameFallbackKeys.set(toolName, key);
         toolCards.set(key, {
           id: key,
           toolName,
           input: undefined,
-          output: content?.output ?? content?.result,
-          status: "complete",
+          status: "pending",
           timestamp: activity.createdAt,
         });
+      } else if (activity.type === "tool-call") {
+        // Merge into existing pending card (from tool-input-start) if one exists
+        const pendingCard = fallbackKey ? toolCards.get(fallbackKey) : null;
+        if (pendingCard && pendingCard.status === "pending") {
+          pendingCard.input = content?.input ?? content?.args;
+          // Re-key with toolCallId so tool-result can find it
+          if (toolCallId && fallbackKey && fallbackKey !== toolCallId) {
+            toolCards.delete(fallbackKey);
+            pendingCard.id = toolCallId;
+            toolCards.set(toolCallId, pendingCard);
+            toolNameFallbackKeys.set(toolName, toolCallId);
+          }
+        } else {
+          const key = toolCallId || fallbackKey || `${toolName}-${activity.createdAt}`;
+          toolNameFallbackKeys.set(toolName, key);
+          toolCards.set(key, {
+            id: key,
+            toolName,
+            input: content?.input ?? content?.args,
+            status: "pending",
+            timestamp: activity.createdAt,
+          });
+        }
+      } else {
+        // tool-result — merge into existing card
+        const key = toolCallId || fallbackKey || `${toolName}-${activity.createdAt}`;
+        const existing = toolCards.get(key);
+        if (existing) {
+          existing.output = content?.output ?? content?.result;
+          existing.status = "complete";
+        } else {
+          toolCards.set(key, {
+            id: key,
+            toolName,
+            input: undefined,
+            output: content?.output ?? content?.result,
+            status: "complete",
+            timestamp: activity.createdAt,
+          });
+        }
+        // Clear fallback so next call to same tool gets its own card
+        toolNameFallbackKeys.delete(toolName);
       }
     } else {
       otherActivities.push(activity);
@@ -181,23 +217,179 @@ function MessageItem({ message }: { message: Message }) {
   );
 }
 
+const TOOL_META: Record<string, { icon: typeof GlobalSearchIcon; label: string; color: string }> = {
+  searchWeb: { icon: GlobalSearchIcon, label: "Web Search", color: "text-blue-500" },
+  searchArxiv: { icon: FileSearchIcon, label: "arXiv Search", color: "text-purple-500" },
+  extract: { icon: GlobalSearchIcon, label: "Extract", color: "text-cyan-500" },
+  executeCode: { icon: SourceCodeIcon, label: "Execute Code", color: "text-amber-500" },
+  bash: { icon: ComputerTerminal01Icon, label: "Terminal", color: "text-emerald-500" },
+};
+
+function formatData(data: unknown): string {
+  if (data === null || data === undefined) return "";
+  if (typeof data === "string") return data;
+  try {
+    return JSON.stringify(data, null, 2);
+  } catch {
+    return String(data);
+  }
+}
+
+function ToolInputSummary({ toolName, input }: { toolName: string; input: unknown }) {
+  const data = input as Record<string, unknown> | null;
+  if (!data) return null;
+
+  switch (toolName) {
+    case "searchWeb": {
+      const queries = data.queries as string[] | undefined;
+      const objective = data.objective as string | undefined;
+      return (
+        <div className="mt-1.5 space-y-1">
+          {objective && <p className="text-[11px] text-muted-foreground italic">{objective}</p>}
+          {queries && queries.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {queries.map((q, i) => (
+                <span key={i} className="text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
+                  {q}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+    case "searchArxiv": {
+      const query = data.query as string | undefined;
+      return query ? (
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          <span className="text-purple-500 font-medium">Query:</span> {query}
+        </p>
+      ) : null;
+    }
+    case "extract": {
+      const urls = data.urls as string[] | undefined;
+      const objective = data.objective as string | undefined;
+      return (
+        <div className="mt-1.5 space-y-1">
+          {objective && <p className="text-[11px] text-muted-foreground italic">{objective}</p>}
+          {urls && urls.length > 0 && (
+            <div className="space-y-0.5">
+              {urls.slice(0, 3).map((url, i) => (
+                <p key={i} className="text-[10px] text-cyan-600 dark:text-cyan-400 truncate">{url}</p>
+              ))}
+              {urls.length > 3 && (
+                <p className="text-[10px] text-muted-foreground">+{urls.length - 3} more</p>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+    case "executeCode": {
+      const code = data.code as string | undefined;
+      return code ? (
+        <pre className="mt-1.5 text-[10px] text-muted-foreground bg-background/50 rounded p-2 overflow-x-auto max-h-24 overflow-y-auto whitespace-pre-wrap break-words font-mono">
+          {code.slice(0, 400)}
+          {code.length > 400 && "..."}
+        </pre>
+      ) : null;
+    }
+    case "bash": {
+      const command = data.command as string | undefined;
+      return command ? (
+        <div className="mt-1.5 flex items-center gap-1.5 bg-background/50 rounded p-1.5">
+          <span className="text-emerald-500 text-[10px] font-mono">$</span>
+          <code className="text-[10px] text-muted-foreground font-mono truncate">{command}</code>
+        </div>
+      ) : null;
+    }
+    default:
+      return null;
+  }
+}
+
+function ToolOutputSummary({ toolName, output }: { toolName: string; output: unknown }) {
+  const data = output as Record<string, unknown> | null;
+  if (!data) return null;
+
+  if (toolName === "searchWeb" || toolName === "searchArxiv") {
+    const answer = data.answer as Record<string, unknown> | undefined;
+    const results = (answer?.results ?? answer?.web_results ?? answer?.data) as Array<Record<string, unknown>> | undefined;
+    if (results && results.length > 0) {
+      return (
+        <div className="mt-2 space-y-1.5">
+          <p className="text-[10px] text-muted-foreground font-medium">{results.length} results</p>
+          {results.slice(0, 3).map((r, i) => (
+            <div key={i} className="bg-background/50 rounded p-1.5">
+              <p className="text-[10px] font-medium truncate">{String(r.title || r.name || "")}</p>
+              {r.url ? <p className="text-[9px] text-muted-foreground truncate">{String(r.url)}</p> : null}
+            </div>
+          ))}
+          {results.length > 3 && (
+            <p className="text-[10px] text-muted-foreground">+{results.length - 3} more</p>
+          )}
+        </div>
+      );
+    }
+  }
+
+  if (toolName === "executeCode" || toolName === "bash") {
+    const stdout = data.stdout as string | undefined;
+    const stderr = data.stderr as string | undefined;
+    const output_text = stdout || stderr || (typeof data.output === "string" ? data.output : null);
+    if (output_text) {
+      return (
+        <pre className="mt-2 text-[10px] bg-background/50 rounded p-2 overflow-x-auto max-h-40 overflow-y-auto whitespace-pre-wrap break-words font-mono">
+          {output_text.slice(0, 1000)}
+          {output_text.length > 1000 && "..."}
+        </pre>
+      );
+    }
+  }
+
+  return null;
+}
+
+function hasCustomInputContent(toolName: string, input: unknown): boolean {
+  if (!input) return false;
+  const data = input as Record<string, unknown>;
+  switch (toolName) {
+    case "searchWeb": return !!(data.queries || data.objective);
+    case "searchArxiv": return !!data.query;
+    case "extract": return !!(data.urls || data.objective);
+    case "executeCode": return !!data.code;
+    case "bash": return !!data.command;
+    default: return false;
+  }
+}
+
+function hasCustomOutputContent(toolName: string, output: unknown): boolean {
+  if (!output) return false;
+  const data = output as Record<string, unknown>;
+  if (toolName === "searchWeb" || toolName === "searchArxiv") {
+    const answer = data.answer as Record<string, unknown> | undefined;
+    const results = answer?.results ?? answer?.web_results ?? answer?.data;
+    return Array.isArray(results) && results.length > 0;
+  }
+  if (toolName === "executeCode" || toolName === "bash") {
+    return !!(data.stdout || data.stderr || (typeof data.output === "string"));
+  }
+  return false;
+}
+
 function ToolCardItem({ tool }: { tool: ToolCard }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const isPending = tool.status === "pending";
+  const meta = TOOL_META[tool.toolName];
+  const ToolIcon = meta?.icon;
+  const label = meta?.label || tool.toolName;
+  const iconColor = meta?.color || "text-muted-foreground";
 
-  const formatOutput = (data: unknown): string => {
-    if (data === null || data === undefined) return "";
-    if (typeof data === "string") return data;
-    try {
-      return JSON.stringify(data, null, 2);
-    } catch {
-      return String(data);
-    }
-  };
-
-  const outputStr = formatOutput(tool.output);
-  const inputStr = formatOutput(tool.input);
+  const outputStr = formatData(tool.output);
   const hasOutput = outputStr.length > 0;
+
+  const hasCustomInput = hasCustomInputContent(tool.toolName, tool.input);
+  const hasCustomOutput = hasCustomOutputContent(tool.toolName, tool.output);
 
   return (
     <div
@@ -216,6 +408,12 @@ function ToolCardItem({ tool }: { tool: ToolCard }) {
               size={14}
               className="text-amber-500 animate-spin"
             />
+          ) : ToolIcon ? (
+            <HugeiconsIcon
+              icon={ToolIcon}
+              size={14}
+              className={iconColor}
+            />
           ) : (
             <HugeiconsIcon
               icon={CheckmarkCircle02Icon}
@@ -223,7 +421,7 @@ function ToolCardItem({ tool }: { tool: ToolCard }) {
               className="text-emerald-500"
             />
           )}
-          <span className="text-xs font-medium">{tool.toolName}</span>
+          <span className="text-xs font-medium">{label}</span>
           {isPending && (
             <span className="text-[10px] text-amber-500">running...</span>
           )}
@@ -237,99 +435,36 @@ function ToolCardItem({ tool }: { tool: ToolCard }) {
               icon={isExpanded ? ArrowUp01Icon : ArrowDown01Icon}
               size={10}
             />
-            {isExpanded ? "collapse" : "expand"}
+            {isExpanded ? "raw" : "expand"}
           </button>
         )}
       </div>
 
-      {inputStr && !hasOutput && (
+      {/* Input summary — always show while pending or if no output yet */}
+      {(!hasOutput || isPending) && (
+        <ToolInputSummary toolName={tool.toolName} input={tool.input} />
+      )}
+      {/* Fallback for tools without custom input renderer */}
+      {!hasCustomInput && !hasOutput && !!tool.input && (
         <pre className="mt-2 text-[10px] text-muted-foreground bg-background/50 rounded p-2 overflow-x-auto max-h-20 overflow-y-auto whitespace-pre-wrap break-words">
-          {inputStr.slice(0, 200)}
-          {inputStr.length > 200 && "..."}
+          {formatData(tool.input).slice(0, 200)}
         </pre>
       )}
 
+      {/* Output — custom summary or raw */}
+      {hasOutput && !isExpanded && hasCustomOutput && (
+        <ToolOutputSummary toolName={tool.toolName} output={tool.output} />
+      )}
+      {hasOutput && !isExpanded && !hasCustomOutput && (
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          {outputStr.length} chars
+        </p>
+      )}
       {hasOutput && isExpanded && (
         <pre className="mt-2 text-[10px] bg-background/50 rounded p-2 overflow-x-auto max-h-60 overflow-y-auto whitespace-pre-wrap break-words">
           {outputStr}
         </pre>
       )}
-
-      {hasOutput && !isExpanded && (
-        <p className="mt-1 text-[10px] text-muted-foreground">
-          {outputStr.length} chars
-        </p>
-      )}
-    </div>
-  );
-}
-
-function ApprovalCard({
-  code,
-  onApprove,
-  onReject,
-}: {
-  code?: string;
-  onApprove: () => void;
-  onReject: (feedback?: string) => void;
-}) {
-  const [feedback, setFeedback] = useState("");
-  const [isRejecting, setIsRejecting] = useState(false);
-
-  const handleReject = () => {
-    if (!isRejecting) {
-      setIsRejecting(true);
-      return;
-    }
-    onReject(feedback || undefined);
-    setIsRejecting(false);
-    setFeedback("");
-  };
-
-  return (
-    <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-3">
-      {code && (
-        <pre className="text-xs bg-muted rounded p-2 overflow-x-auto max-h-32 overflow-y-auto mb-3">
-          <code>{code}</code>
-        </pre>
-      )}
-      {isRejecting && (
-        <textarea
-          value={feedback}
-          onChange={(e) => setFeedback(e.target.value)}
-          placeholder="Why are you rejecting? (optional)"
-          className="w-full text-sm rounded border border-input bg-background px-2 py-1.5 mb-2 resize-none"
-          rows={2}
-          autoFocus
-        />
-      )}
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          onClick={onApprove}
-          className="flex-1 bg-emerald-600 hover:bg-emerald-700 h-7 text-xs"
-        >
-          Approve
-        </Button>
-        <Button
-          size="sm"
-          variant={isRejecting ? "destructive" : "outline"}
-          onClick={handleReject}
-          className="flex-1 h-7 text-xs"
-        >
-          {isRejecting ? "Confirm Reject" : "Reject"}
-        </Button>
-        {isRejecting && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setIsRejecting(false)}
-            className="h-7 text-xs"
-          >
-            Cancel
-          </Button>
-        )}
-      </div>
     </div>
   );
 }

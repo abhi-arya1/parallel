@@ -1,0 +1,41 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sandboxes-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-02-10",
+  "preview_urls": false,
+  "workers_dev": false,
+  "compatibility_flags": ["nodejs_compat"],
+  "limits": {
+    "cpu_ms": 300000,
+  },
+  "containers": [
+    {
+      "class_name": "SandboxContainer",
+      "image": "../container/Dockerfile",
+      "max_instances": 10,
+      "instance_type": "standard-2",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SANDBOX_CONTAINER",
+        "class_name": "SandboxContainer",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SandboxContainer"],
+    },
+  ],
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+    },
+  },
+}

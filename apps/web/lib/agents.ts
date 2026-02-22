@@ -10,5 +10,5 @@ export function getAgentWsUrl(role: AgentRole, workspaceId: string): string {
     "https://",
     "wss://",
   );
-  return `${base}/agents/PersonaAgent/${role}-${workspaceId}`;
+  return `${base}/agents/persona-agent/${role}-${workspaceId}`;
 }

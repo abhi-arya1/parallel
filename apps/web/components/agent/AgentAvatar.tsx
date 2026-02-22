@@ -13,7 +13,6 @@ const STATUS_ICON: Record<AgentStatus, string> = {
   spawning: "thinking-1",
   thinking: "thinking-1",
   working: "thinking-2",
-  working_hard: "thinking-2",
   awaiting_approval: "confused-1",
   done: "happy-1",
   idle: "happy-2",

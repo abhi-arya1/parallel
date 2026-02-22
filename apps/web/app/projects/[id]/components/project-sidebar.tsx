@@ -27,13 +27,14 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { AgentStatusSection } from "@/components/agent";
-import type { Id } from "@/convex/_generated/dataModel";
+import type { AgentRole, AgentState } from "@/components/agent/types";
 
 interface ProjectSidebarProps {
   preloadedWorkspace: Preloaded<typeof api.workspaces.get>;
   preloadedCollaborators: Preloaded<typeof api.workspaces.getCollaborators>;
-  selectedAgentId: Id<"agents"> | null;
-  onSelectAgent: (agentId: Id<"agents"> | null) => void;
+  agents?: Record<AgentRole, AgentState>;
+  selectedAgentRole: AgentRole | null;
+  onSelectAgent: (role: AgentRole | null) => void;
   showRunsPanel?: boolean;
   onToggleRunsPanel?: () => void;
   children?: React.ReactNode;
@@ -42,7 +43,8 @@ interface ProjectSidebarProps {
 export function ProjectSidebar({
   preloadedWorkspace,
   preloadedCollaborators,
-  selectedAgentId,
+  agents,
+  selectedAgentRole,
   onSelectAgent,
   showRunsPanel,
   onToggleRunsPanel,
@@ -57,10 +59,10 @@ export function ProjectSidebar({
         preloadedCollaborators={preloadedCollaborators}
       />
 
-      {workspace && (
+      {workspace && agents && (
         <AgentStatusSection
-          workspaceId={workspace._id}
-          selectedAgentId={selectedAgentId}
+          agents={agents}
+          selectedAgentRole={selectedAgentRole}
           onSelectAgent={onSelectAgent}
         />
       )}

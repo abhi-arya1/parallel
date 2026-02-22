@@ -27,6 +27,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Settings01Icon } from "@hugeicons-pro/core-duotone-rounded";
 import type { Id } from "@/convex/_generated/dataModel";
 import { ResearchButton } from "@/components/agent";
+import type { AgentRole } from "@/components/agent/types";
+import { useAgentConnections } from "@/lib/use-agent-connections";
 
 interface ProjectPageClientProps {
   id: string;
@@ -44,20 +46,24 @@ export function ProjectPageClient({
   const workspace = usePreloadedQuery(preloadedWorkspace);
   const [isRunningAll, setIsRunningAll] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
-  const [selectedAgentId, setSelectedAgentId] = useState<Id<"agents"> | null>(
+  const [selectedAgentRole, setSelectedAgentRole] = useState<AgentRole | null>(
     null,
   );
   const [showRunsPanel, setShowRunsPanel] = useState(false);
 
-  const handleSelectAgent = (agentId: Id<"agents"> | null) => {
-    setSelectedAgentId(agentId);
-    if (agentId) setShowRunsPanel(false); // Close runs panel when selecting agent
+  const { agents, steer, clear, setAutoApprove, approve, reject } =
+    useAgentConnections(workspace?._id);
+
+  const handleSelectAgent = (role: AgentRole | null) => {
+    setSelectedAgentRole(role);
+    if (role) setShowRunsPanel(false);
   };
 
   const handleToggleRunsPanel = () => {
     setShowRunsPanel(!showRunsPanel);
-    if (!showRunsPanel) setSelectedAgentId(null); // Close agent panel when opening runs
+    if (!showRunsPanel) setSelectedAgentRole(null);
   };
+
   const notebookRef = useRef<NotebookEditorRef>(null);
   const clearAllOutputs = useMutation(api.cells.clearAllOutputs);
 
@@ -93,7 +99,6 @@ export function ProjectPageClient({
       return;
     }
 
-    // Create and download the file
     const blob = new Blob([markdown], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -136,7 +141,6 @@ export function ProjectPageClient({
           )}
         </button>
 
-        {/* Kernel menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-7 w-7">
@@ -171,14 +175,21 @@ export function ProjectPageClient({
           <ProjectSidebar
             preloadedWorkspace={preloadedWorkspace}
             preloadedCollaborators={preloadedCollaborators}
-            selectedAgentId={selectedAgentId}
+            agents={agents}
+            selectedAgentRole={selectedAgentRole}
             onSelectAgent={handleSelectAgent}
             showRunsPanel={showRunsPanel}
             onToggleRunsPanel={handleToggleRunsPanel}
           />
         }
-        selectedAgentId={selectedAgentId}
-        onCloseAgentPanel={() => setSelectedAgentId(null)}
+        selectedAgentRole={selectedAgentRole}
+        agents={agents}
+        onCloseAgentPanel={() => setSelectedAgentRole(null)}
+        onSteer={steer}
+        onClear={clear}
+        onSetAutoApprove={setAutoApprove}
+        onApprove={approve}
+        onReject={reject}
         showRunsPanel={showRunsPanel}
         onCloseRunsPanel={() => setShowRunsPanel(false)}
         workspaceId={workspace?._id}
@@ -193,7 +204,6 @@ export function ProjectPageClient({
         />
       </ResizableLayout>
 
-      {/* Last saved indicator */}
       <div className="absolute bottom-4 right-4 z-50">
         <div className="rounded-full bg-muted/80 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur-sm">
           Saved{" "}

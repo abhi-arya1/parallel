@@ -1,7 +1,8 @@
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "parallel-agents",
   "main": "src/index.ts",
-  "compatibility_date": "2026-02-21",
+  "compatibility_date": "2025-02-21",
   "compatibility_flags": [
     "nodejs_compat",
     "nodejs_compat_populate_process_env",
@@ -13,11 +14,11 @@
   "durable_objects": {
     "bindings": [
       {
-        "name": "ParallelAgent",
+        "name": "PARALLEL_AGENT",
         "class_name": "ParallelAgent",
       },
       {
-        "name": "PersonaAgent",
+        "name": "PERSONA_AGENT",
         "class_name": "PersonaAgent",
       },
     ],
@@ -31,6 +32,14 @@
     {
       "tag": "v2",
       "new_sqlite_classes": ["PersonaAgent"],
+    },
+  ],
+
+  "rules": [
+    {
+      "type": "Text",
+      "globs": ["**/*.sql"],
+      "fallthrough": true,
     },
   ],
 

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { AgentDetailPanel } from "@/components/agent/AgentDetailPanel";
 import { RunsPanel } from "@/components/editor/RunsPanel";
 import type { Id } from "@/convex/_generated/dataModel";
+import type { AgentRole, AgentState } from "@/components/agent/types";
 
 const MIN_SIDEBAR_WIDTH = 15;
 const MAX_SIDEBAR_WIDTH = 40;
@@ -17,8 +18,14 @@ interface ResizableLayoutProps {
   sidebar: React.ReactNode;
   children: React.ReactNode;
   className?: string;
-  selectedAgentId?: Id<"agents"> | null;
+  selectedAgentRole?: AgentRole | null;
+  agents?: Record<AgentRole, AgentState>;
   onCloseAgentPanel?: () => void;
+  onSteer?: (role: AgentRole, content: string) => void;
+  onClear?: (role: AgentRole) => void;
+  onSetAutoApprove?: (role: AgentRole, value: boolean) => void;
+  onApprove?: (role: AgentRole) => void;
+  onReject?: (role: AgentRole, feedback?: string) => void;
   showRunsPanel?: boolean;
   onCloseRunsPanel?: () => void;
   workspaceId?: Id<"workspaces">;
@@ -28,8 +35,14 @@ export function ResizableLayout({
   sidebar,
   children,
   className,
-  selectedAgentId,
+  selectedAgentRole,
+  agents,
   onCloseAgentPanel,
+  onSteer,
+  onClear,
+  onSetAutoApprove,
+  onApprove,
+  onReject,
   showRunsPanel,
   onCloseRunsPanel,
   workspaceId,
@@ -42,8 +55,9 @@ export function ResizableLayout({
   const isDraggingSidebar = useRef(false);
   const isDraggingSecondaryPanel = useRef(false);
 
-  // Determine which panel to show (only one at a time)
-  const showSecondaryPanel = selectedAgentId || (showRunsPanel && workspaceId);
+  const selectedAgent =
+    selectedAgentRole && agents ? agents[selectedAgentRole] : null;
+  const showSecondaryPanel = selectedAgent || (showRunsPanel && workspaceId);
 
   const handleSidebarMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -118,7 +132,6 @@ export function ResizableLayout({
         className="w-1 flex-shrink-0 cursor-col-resize hover:bg-accent transition-colors"
       />
 
-      {/* Secondary panel with slide animation */}
       <aside
         style={{ width: showSecondaryPanel ? secondaryPanelWidth : 0 }}
         className={cn(
@@ -126,13 +139,22 @@ export function ResizableLayout({
           !showSecondaryPanel && "border-r-0",
         )}
       >
-        {selectedAgentId && (
+        {selectedAgent && selectedAgentRole && (
           <AgentDetailPanel
-            agentId={selectedAgentId}
+            role={selectedAgentRole}
+            status={selectedAgent.status}
+            autoApprove={selectedAgent.autoApprove}
+            activity={selectedAgent.activity}
+            streamingText={selectedAgent.streamingText}
+            onSteer={(content) => onSteer?.(selectedAgentRole, content)}
+            onClear={() => onClear?.(selectedAgentRole)}
+            onSetAutoApprove={(value) =>
+              onSetAutoApprove?.(selectedAgentRole, value)
+            }
             onClose={onCloseAgentPanel}
           />
         )}
-        {showRunsPanel && workspaceId && !selectedAgentId && (
+        {showRunsPanel && workspaceId && !selectedAgent && (
           <>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <h3 className="text-sm font-semibold">Runs</h3>
